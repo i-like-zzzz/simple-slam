@@ -26,6 +26,12 @@ public:
     bool enable_map_update = true;
     double keyframe_translation_threshold = 0.2;
     double keyframe_rotation_threshold = 0.17;
+    double lidar_odom_linear_window = 0.2;
+    double lidar_odom_angular_window = 0.2;
+    double lidar_odom_translation_weight = 1.0;
+    double lidar_odom_rotation_weight = 0.2;
+    double lidar_odom_point_sigma = 0.15;
+    int lidar_odom_max_points = 48;
     SearchParameters2D scan_matcher;
     Submap2D::Options submap;
   };
@@ -36,11 +42,17 @@ public:
     const sensor_msgs::msg::LaserScan & scan,
     const nav_msgs::msg::Odometry * odom_msg);
   const std::vector<std::shared_ptr<Submap2D>> & active_submaps() const;
+  const Pose2D & lidar_odom_pose() const;
 
 private:
   RangeData2D FilterScan(const sensor_msgs::msg::LaserScan & scan) const;
   RangeData2D VoxelFilter(const RangeData2D & range_data) const;
+  std::vector<Point2D> DownsamplePoints(const std::vector<Point2D> & points, int max_points) const;
+  Pose2D PoseFromOdom(const nav_msgs::msg::Odometry & odom_msg) const;
   Pose2D PredictPose(const nav_msgs::msg::Odometry * odom_msg);
+  Pose2D MatchToPreviousScan(
+    const RangeData2D & current_range_data,
+    const Pose2D & initial_relative_pose) const;
   Pose2D MatchToActiveSubmap(const RangeData2D & range_data, const Pose2D & predicted_pose) const;
   double ScoreCandidate(
     const Submap2D & submap,
@@ -56,9 +68,13 @@ private:
   bool has_pose_estimate_ = false;
   bool has_previous_odom_ = false;
   bool has_last_keyframe_pose_ = false;
+  bool has_previous_range_data_ = false;
   Pose2D local_pose_estimate_;
+  Pose2D lidar_odom_pose_estimate_;
   Pose2D previous_odom_pose_;
   Pose2D last_keyframe_pose_;
+  Pose2D lidar_odom_delta_;
+  RangeData2D previous_range_data_;
   int next_submap_id_ = 0;
   std::vector<std::shared_ptr<Submap2D>> active_submaps_;
 };

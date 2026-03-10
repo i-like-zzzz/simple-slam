@@ -18,3 +18,33 @@
 - `PoseGraph2D`：位姿图接口与状态缓存
 
 后续迭代将逐步把 scan matching、约束构建和非线性优化填充进去。
+
+## 当前可观察话题
+
+- `/trajectory`
+- `/laser_odom`
+- `/keyframes`
+- `/scan`
+
+## 启动示例
+
+直接启动 `simple_slam` 并打开 RViz：
+
+```bash
+source /home/zwc/ros_simulation/install/setup.bash
+ros2 launch simple_slam simple_slam.launch.py
+```
+
+用 `bring_up` 走 bag 回放验证：
+
+```bash
+source /home/zwc/ros_simulation/install/setup.bash
+ros2 launch bringup main.launch.py \
+  simulator:=none \
+  play_bag:=true \
+  slam_system:=simple_slam \
+  start_stage:=false \
+  start_rviz:=true \
+  rviz_config:=/home/zwc/ros_simulation/install/simple_slam/share/simple_slam/rviz/simple_slam.rviz \
+  bag_file:=/home/zwc/ros_simulation/bag/1111
+```

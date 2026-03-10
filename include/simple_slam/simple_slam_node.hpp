@@ -32,12 +32,14 @@ private:
   rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr scan_sub_;
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
   rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr path_pub_;
+  rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr laser_odom_pub_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr keyframe_marker_pub_;
   std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
 
   std::optional<nav_msgs::msg::Odometry> latest_odom_;
   nav_msgs::msg::Path path_msg_;
   std::vector<Pose2D> keyframe_poses_;
+  int processed_scan_count_ = 0;
 
   std::unique_ptr<LocalSlamFrontend> frontend_;
   std::unique_ptr<PoseGraph2D> pose_graph_;
@@ -46,6 +48,7 @@ private:
   SystemMode system_mode_ = SystemMode::kMapping;
   bool publish_keyframe_markers_ = true;
   double keyframe_marker_scale_ = 0.25;
+  int debug_log_every_n_scans_ = 100;
 
   std::string map_frame_;
   std::string odom_frame_;

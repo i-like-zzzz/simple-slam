@@ -4,6 +4,11 @@
 #include <cmath>
 #include <limits>
 
+#include <Eigen/Core>
+#include <pcl/common/transforms.h>
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
+#include <pcl/registration/icp.h>
 #include "tf2_geometry_msgs/tf2_geometry_msgs.hpp"
 #include "tf2/utils.h"
 
@@ -29,8 +34,15 @@ LocalSlamResult2D LocalSlamFrontend::AddScan(
   }
 
   const Pose2D predicted_pose = PredictPose(odom_msg);
+  Pose2D lidar_odom_pose = predicted_pose;
+  if (odom_msg == nullptr && has_previous_range_data_) {
+    // 没有外部里程计时，基于相邻两帧直接估计相对运动。
+    const Pose2D relative_lidar_motion = MatchToPreviousScan(result.range_data, lidar_odom_delta_);
+    lidar_odom_delta_ = relative_lidar_motion;
+    lidar_odom_pose = ComposePoses(lidar_odom_pose_estimate_, relative_lidar_motion);
+  }
   MaybeGrowActiveSubmaps(predicted_pose);
-  result.local_pose = MatchToActiveSubmap(result.range_data, predicted_pose);
+  result.local_pose = MatchToActiveSubmap(result.range_data, lidar_odom_pose);
 
   ++accumulated_scans_;
   result.valid = true;
@@ -46,14 +58,28 @@ LocalSlamResult2D LocalSlamFrontend::AddScan(
     accumulated_scans_ = 0;
   }
 
+  if (has_pose_estimate_) {
+    // 有外部里程计时，用局部位姿差分更新一个可观测的激光里程计轨迹。
+    if (odom_msg != nullptr) {
+      lidar_odom_delta_ = RelativePose(local_pose_estimate_, result.local_pose);
+    }
+  }
   local_pose_estimate_ = result.local_pose;
+  lidar_odom_pose_estimate_ = lidar_odom_pose;
   has_pose_estimate_ = true;
+  previous_range_data_ = result.range_data;
+  has_previous_range_data_ = true;
   return result;
 }
 
 const std::vector<std::shared_ptr<Submap2D>> & LocalSlamFrontend::active_submaps() const
 {
   return active_submaps_;
+}
+
+const Pose2D & LocalSlamFrontend::lidar_odom_pose() const
+{
+  return lidar_odom_pose_estimate_;
 }
 
 RangeData2D LocalSlamFrontend::FilterScan(const sensor_msgs::msg::LaserScan & scan) const
@@ -112,44 +138,134 @@ RangeData2D LocalSlamFrontend::VoxelFilter(const RangeData2D & range_data) const
   return filtered;
 }
 
+std::vector<Point2D> LocalSlamFrontend::DownsamplePoints(
+  const std::vector<Point2D> & points,
+  const int max_points) const
+{
+  if (max_points <= 0 || static_cast<int>(points.size()) <= max_points) {
+    return points;
+  }
+
+  std::vector<Point2D> sampled_points;
+  sampled_points.reserve(static_cast<size_t>(max_points));
+  const size_t stride = std::max<size_t>(1, points.size() / static_cast<size_t>(max_points));
+  for (size_t index = 0; index < points.size() && static_cast<int>(sampled_points.size()) < max_points;
+    index += stride)
+  {
+    sampled_points.push_back(points[index]);
+  }
+  return sampled_points;
+}
+
+Pose2D LocalSlamFrontend::PoseFromOdom(const nav_msgs::msg::Odometry & odom_msg) const
+{
+  Pose2D odom_pose;
+  odom_pose.x = odom_msg.pose.pose.position.x;
+  odom_pose.y = odom_msg.pose.pose.position.y;
+
+  tf2::Quaternion q;
+  tf2::fromMsg(odom_msg.pose.pose.orientation, q);
+  odom_pose.yaw = tf2::getYaw(q);
+  return odom_pose;
+}
+
 Pose2D LocalSlamFrontend::PredictPose(const nav_msgs::msg::Odometry * odom_msg)
 {
-  // 里程计只作为预测项，不直接当作最终位姿。
+  // 预测项优先使用外部里程计；没有 /odom 时退回到激光里程计增量。
   if (!has_pose_estimate_) {
     if (odom_msg != nullptr) {
-      previous_odom_pose_ = Pose2D{
-        odom_msg->pose.pose.position.x,
-        odom_msg->pose.pose.position.y,
-        0.0};
-      tf2::Quaternion q;
-      tf2::fromMsg(odom_msg->pose.pose.orientation, q);
-      previous_odom_pose_.yaw = tf2::getYaw(q);
+      previous_odom_pose_ = PoseFromOdom(*odom_msg);
       has_previous_odom_ = true;
       return previous_odom_pose_;
     }
     return Pose2D{};
   }
 
-  if (odom_msg == nullptr) {
-    return local_pose_estimate_;
-  }
+  if (odom_msg != nullptr) {
+    const Pose2D current_odom_pose = PoseFromOdom(*odom_msg);
+    if (!has_previous_odom_) {
+      previous_odom_pose_ = current_odom_pose;
+      has_previous_odom_ = true;
+      return local_pose_estimate_;
+    }
 
-  Pose2D current_odom_pose;
-  current_odom_pose.x = odom_msg->pose.pose.position.x;
-  current_odom_pose.y = odom_msg->pose.pose.position.y;
-  tf2::Quaternion q;
-  tf2::fromMsg(odom_msg->pose.pose.orientation, q);
-  current_odom_pose.yaw = tf2::getYaw(q);
-
-  if (!has_previous_odom_) {
+    const Pose2D odom_delta = RelativePose(previous_odom_pose_, current_odom_pose);
     previous_odom_pose_ = current_odom_pose;
-    has_previous_odom_ = true;
+    return ComposePoses(local_pose_estimate_, odom_delta);
+  }
+
+  if (!has_previous_range_data_) {
+    // 第一次没有 /odom 时先保持当前位姿，下一帧开始滚动激光里程计增量。
     return local_pose_estimate_;
   }
 
-  const Pose2D odom_delta = RelativePose(previous_odom_pose_, current_odom_pose);
-  previous_odom_pose_ = current_odom_pose;
-  return ComposePoses(local_pose_estimate_, odom_delta);
+  return ComposePoses(local_pose_estimate_, lidar_odom_delta_);
+}
+
+Pose2D LocalSlamFrontend::MatchToPreviousScan(
+  const RangeData2D & current_range_data,
+  const Pose2D & initial_relative_pose) const
+{
+  if (!has_previous_range_data_ || previous_range_data_.returns.empty()) {
+    return initial_relative_pose;
+  }
+
+  const auto current_points =
+    DownsamplePoints(current_range_data.returns, options_.lidar_odom_max_points);
+  const auto previous_points =
+    DownsamplePoints(previous_range_data_.returns, options_.lidar_odom_max_points);
+  if (current_points.empty() || previous_points.empty()) {
+    return initial_relative_pose;
+  }
+
+  pcl::PointCloud<pcl::PointXYZ>::Ptr source_cloud(new pcl::PointCloud<pcl::PointXYZ>());
+  pcl::PointCloud<pcl::PointXYZ>::Ptr target_cloud(new pcl::PointCloud<pcl::PointXYZ>());
+  source_cloud->reserve(current_points.size());
+  target_cloud->reserve(previous_points.size());
+
+  for (const auto & point : current_points) {
+    source_cloud->push_back(pcl::PointXYZ(
+      static_cast<float>(point.x),
+      static_cast<float>(point.y),
+      0.0F));
+  }
+  for (const auto & point : previous_points) {
+    target_cloud->push_back(pcl::PointXYZ(
+      static_cast<float>(point.x),
+      static_cast<float>(point.y),
+      0.0F));
+  }
+
+  pcl::IterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ> icp;
+  icp.setInputSource(source_cloud);
+  icp.setInputTarget(target_cloud);
+  icp.setMaximumIterations(40);
+  icp.setMaxCorrespondenceDistance(options_.lidar_odom_point_sigma);
+  icp.setTransformationEpsilon(1e-6);
+  icp.setEuclideanFitnessEpsilon(1e-6);
+  icp.setRANSACOutlierRejectionThreshold(options_.lidar_odom_point_sigma);
+
+  Eigen::Matrix4f initial_guess = Eigen::Matrix4f::Identity();
+  initial_guess(0, 0) = static_cast<float>(std::cos(initial_relative_pose.yaw));
+  initial_guess(0, 1) = static_cast<float>(-std::sin(initial_relative_pose.yaw));
+  initial_guess(1, 0) = static_cast<float>(std::sin(initial_relative_pose.yaw));
+  initial_guess(1, 1) = static_cast<float>(std::cos(initial_relative_pose.yaw));
+  initial_guess(0, 3) = static_cast<float>(initial_relative_pose.x);
+  initial_guess(1, 3) = static_cast<float>(initial_relative_pose.y);
+
+  pcl::PointCloud<pcl::PointXYZ> aligned_cloud;
+  icp.align(aligned_cloud, initial_guess);
+  if (!icp.hasConverged()) {
+    return initial_relative_pose;
+  }
+
+  const Eigen::Matrix4f transform = icp.getFinalTransformation();
+  const double yaw = std::atan2(transform(1, 0), transform(0, 0));
+  Pose2D relative_pose;
+  relative_pose.x = static_cast<double>(transform(0, 3));
+  relative_pose.y = static_cast<double>(transform(1, 3));
+  relative_pose.yaw = NormalizeAngle(yaw);
+  return relative_pose;
 }
 
 Pose2D LocalSlamFrontend::MatchToActiveSubmap(

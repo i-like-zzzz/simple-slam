@@ -22,6 +22,7 @@ SimpleSlamNode::SimpleSlamNode()
   system_mode_ = ParseSystemMode(declare_parameter("system_mode", std::string("mapping")));
   publish_keyframe_markers_ = declare_parameter("publish_keyframe_markers", true);
   keyframe_marker_scale_ = declare_parameter("keyframe_marker_scale", 0.25);
+  debug_log_every_n_scans_ = static_cast<int>(declare_parameter("debug_log_every_n_scans", 100));
   const bool enable_backend = declare_parameter("enable_backend", false);
 
   const auto active_submap_num_range_data =
@@ -38,6 +39,12 @@ SimpleSlamNode::SimpleSlamNode()
       enable_map_update,
       declare_parameter("keyframe_translation_threshold", 0.2),
       declare_parameter("keyframe_rotation_threshold", 0.17),
+      declare_parameter("lidar_odom_linear_window", 0.2),
+      declare_parameter("lidar_odom_angular_window", 0.2),
+      declare_parameter("lidar_odom_translation_weight", 1.0),
+      declare_parameter("lidar_odom_rotation_weight", 0.2),
+      declare_parameter("lidar_odom_point_sigma", 0.15),
+      static_cast<int>(declare_parameter("lidar_odom_max_points", 48)),
       SearchParameters2D{
         declare_parameter("linear_search_window", 0.3),
         declare_parameter("angular_search_window", 0.35),
@@ -59,13 +66,16 @@ SimpleSlamNode::SimpleSlamNode()
   path_msg_.header.frame_id = map_frame_;
 
   path_pub_ = create_publisher<nav_msgs::msg::Path>("trajectory", 10);
+  laser_odom_pub_ = create_publisher<nav_msgs::msg::Odometry>("laser_odom", 10);
   keyframe_marker_pub_ = create_publisher<visualization_msgs::msg::MarkerArray>("keyframes", 10);
   tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
 
+  // 传感器话题统一用 SensorDataQoS，兼容仿真和 rosbag 回放里的 best_effort 发布者。
+  const auto sensor_qos = rclcpp::SensorDataQoS();
   odom_sub_ = create_subscription<nav_msgs::msg::Odometry>(
-    "odom", 50, std::bind(&SimpleSlamNode::HandleOdom, this, std::placeholders::_1));
+    "odom", sensor_qos, std::bind(&SimpleSlamNode::HandleOdom, this, std::placeholders::_1));
   scan_sub_ = create_subscription<sensor_msgs::msg::LaserScan>(
-    "scan", 50, std::bind(&SimpleSlamNode::HandleScan, this, std::placeholders::_1));
+    "scan", sensor_qos, std::bind(&SimpleSlamNode::HandleScan, this, std::placeholders::_1));
 
   RCLCPP_INFO(
     get_logger(),
@@ -87,6 +97,18 @@ void SimpleSlamNode::HandleScan(const sensor_msgs::msg::LaserScan::SharedPtr msg
   pose_graph_->AddNode(result);
   pose_graph_->RegisterSubmaps(frontend_->active_submaps());
   backend_->AddLocalSlamResult(result);
+  ++processed_scan_count_;
+  if (debug_log_every_n_scans_ > 0 && processed_scan_count_ % debug_log_every_n_scans_ == 0) {
+    RCLCPP_INFO(
+      get_logger(),
+      "frontend status: scans=%d pose=(%.3f, %.3f, %.3f) keyframes=%zu insertion=%s",
+      processed_scan_count_,
+      result.local_pose.x,
+      result.local_pose.y,
+      result.local_pose.yaw,
+      keyframe_poses_.size(),
+      result.insertion_required ? "true" : "false");
+  }
   PublishOutputs(result);
 }
 
@@ -110,6 +132,16 @@ void SimpleSlamNode::PublishOutputs(const LocalSlamResult2D & result)
   path_msg_.header.stamp = pose_stamped.header.stamp;
   path_msg_.poses.push_back(pose_stamped);
   path_pub_->publish(path_msg_);
+
+  nav_msgs::msg::Odometry laser_odom_msg;
+  laser_odom_msg.header.stamp = pose_stamped.header.stamp;
+  laser_odom_msg.header.frame_id = map_frame_;
+  laser_odom_msg.child_frame_id = published_frame_;
+  laser_odom_msg.pose.pose = ToRosPose(frontend_->lidar_odom_pose());
+  tf2::Quaternion laser_odom_q;
+  laser_odom_q.setRPY(0.0, 0.0, frontend_->lidar_odom_pose().yaw);
+  laser_odom_msg.pose.pose.orientation = tf2::toMsg(laser_odom_q);
+  laser_odom_pub_->publish(laser_odom_msg);
 
   geometry_msgs::msg::TransformStamped tf_msg;
   tf_msg.header.stamp = pose_stamped.header.stamp;
