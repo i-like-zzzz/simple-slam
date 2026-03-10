@@ -9,6 +9,7 @@
 namespace simple_slam
 {
 
+// 当前版本的 2D 子图使用固定大小的局部占据栅格。
 class Submap2D
 {
 public:
@@ -24,12 +25,17 @@ public:
 
   Submap2D(int id, Options options, const Pose2D & initial_pose);
 
+  // 把一帧量测投到当前子图里。
   void InsertRangeData(const RangeData2D & range_data, const Pose2D & local_pose);
   bool IsFinished() const;
   int id() const;
   int num_insertions() const;
   const Pose2D & origin() const;
+
+  // 给 scan matcher 查询某个世界坐标点的占据概率。
   double GetProbability(const Point2D & world_point) const;
+
+  // 子图刚开始太稀疏时不适合作为匹配目标。
   bool HasSufficientData() const;
   const Options & options() const;
 

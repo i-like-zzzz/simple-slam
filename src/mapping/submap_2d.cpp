@@ -9,11 +9,13 @@ namespace simple_slam
 namespace
 {
 
+// 占据概率转 log-odds，方便反复累计更新。
 double ProbabilityToLogOdds(const double probability)
 {
   return std::log(probability / (1.0 - probability));
 }
 
+// 内部存的是 log-odds，对外查询时再还原成概率。
 double LogOddsToProbability(const double log_odds)
 {
   const double odds = std::exp(log_odds);
@@ -93,6 +95,7 @@ bool Submap2D::IsInside(const GridIndex & index) const
 
 std::optional<Submap2D::GridIndex> Submap2D::WorldToGrid(const Point2D & world_point) const
 {
+  // 当前子图始终围绕 origin 附近展开，不做动态扩容。
   const double origin_x = map_center_.x - 0.5 * static_cast<double>(options_.width) * options_.resolution;
   const double origin_y = map_center_.y - 0.5 * static_cast<double>(options_.height) * options_.resolution;
   const int cell_x = static_cast<int>(std::floor((world_point.x - origin_x) / options_.resolution));
@@ -118,6 +121,7 @@ void Submap2D::UpdateCell(const GridIndex & index, const double delta)
   if (!IsInside(index)) {
     return;
   }
+  // 限幅避免单个栅格在长时间运行后数值过饱和。
   double & log_odds = log_odds_cells_[ToFlatIndex(index)];
   log_odds = std::clamp(log_odds + delta, -4.0, 4.0);
 }

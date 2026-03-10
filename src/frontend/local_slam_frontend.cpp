@@ -18,6 +18,7 @@ namespace simple_slam
 LocalSlamFrontend::LocalSlamFrontend(Options options)
 : options_(options)
 {
+  // 子图插入数量上限直接复用前端活动子图配置，避免两边参数漂移。
   options_.submap.num_range_data_limit = options_.active_submap_num_range_data;
 }
 
@@ -36,11 +37,13 @@ LocalSlamResult2D LocalSlamFrontend::AddScan(
   const Pose2D predicted_pose = PredictPose(odom_msg);
   Pose2D lidar_odom_pose = predicted_pose;
   if (odom_msg == nullptr && has_previous_range_data_) {
-    // 没有外部里程计时，基于相邻两帧直接估计相对运动。
+    // 没有外部里程计时，先靠 ICP 估计相邻两帧相对运动。
     const Pose2D relative_lidar_motion = MatchToPreviousScan(result.range_data, lidar_odom_delta_);
     lidar_odom_delta_ = relative_lidar_motion;
     lidar_odom_pose = ComposePoses(lidar_odom_pose_estimate_, relative_lidar_motion);
   }
+
+  // 再把预测位姿送进活动子图匹配，得到更稳定的局部位姿。
   MaybeGrowActiveSubmaps(predicted_pose);
   result.local_pose = MatchToActiveSubmap(result.range_data, lidar_odom_pose);
 
@@ -239,6 +242,7 @@ Pose2D LocalSlamFrontend::MatchToPreviousScan(
   pcl::IterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ> icp;
   icp.setInputSource(source_cloud);
   icp.setInputTarget(target_cloud);
+  // 当前先用最直接的点到点 ICP，把相邻两帧的初值问题先解决掉。
   icp.setMaximumIterations(40);
   icp.setMaxCorrespondenceDistance(options_.lidar_odom_point_sigma);
   icp.setTransformationEpsilon(1e-6);

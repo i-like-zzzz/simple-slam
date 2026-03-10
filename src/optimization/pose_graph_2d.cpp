@@ -1,5 +1,7 @@
 #include "simple_slam/optimization/pose_graph_2d.hpp"
 
+#include <algorithm>
+
 namespace simple_slam
 {
 
@@ -32,6 +34,7 @@ const std::vector<std::shared_ptr<Submap2D>> & PoseGraph2D::submaps() const
 
 void PoseGraph2D::RegisterSubmaps(const std::vector<std::shared_ptr<Submap2D>> & active_submaps)
 {
+  // 只登记新出现的子图，避免每帧都重复压入同一份 shared_ptr。
   for (const auto & submap : active_submaps) {
     const auto existing = std::find_if(
       submaps_.begin(), submaps_.end(),

@@ -18,15 +18,23 @@
 namespace simple_slam
 {
 
+// ROS 2 包装节点：负责订阅传感器、驱动前端，并发布调试结果。
 class SimpleSlamNode : public rclcpp::Node
 {
 public:
   SimpleSlamNode();
 
 private:
+  // 处理一帧激光，并驱动一次局部 SLAM 更新。
   void HandleScan(const sensor_msgs::msg::LaserScan::SharedPtr msg);
+
+  // 缓存最新外部里程计，供前端做预测。
   void HandleOdom(const nav_msgs::msg::Odometry::SharedPtr msg);
+
+  // 统一发布路径、激光里程计和 TF。
   void PublishOutputs(const LocalSlamResult2D & result);
+
+  // 发布关键帧箭头，方便在 RViz 里观察插帧位置。
   void PublishKeyframeMarkers(const LocalSlamResult2D & result, const rclcpp::Time & stamp);
 
   rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr scan_sub_;

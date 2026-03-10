@@ -66,6 +66,7 @@ SimpleSlamNode::SimpleSlamNode()
   path_msg_.header.frame_id = map_frame_;
 
   path_pub_ = create_publisher<nav_msgs::msg::Path>("trajectory", 10);
+  // 单独发布激光里程计，便于和最终局部位姿做对比。
   laser_odom_pub_ = create_publisher<nav_msgs::msg::Odometry>("laser_odom", 10);
   keyframe_marker_pub_ = create_publisher<visualization_msgs::msg::MarkerArray>("keyframes", 10);
   tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
@@ -137,6 +138,7 @@ void SimpleSlamNode::PublishOutputs(const LocalSlamResult2D & result)
   laser_odom_msg.header.stamp = pose_stamped.header.stamp;
   laser_odom_msg.header.frame_id = map_frame_;
   laser_odom_msg.child_frame_id = published_frame_;
+  // 这里发的是纯前端 ICP 累积结果，不是经过子图匹配修正后的最终轨迹。
   laser_odom_msg.pose.pose = ToRosPose(frontend_->lidar_odom_pose());
   tf2::Quaternion laser_odom_q;
   laser_odom_q.setRPY(0.0, 0.0, frontend_->lidar_odom_pose().yaw);
