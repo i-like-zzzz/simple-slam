@@ -1,0 +1,29 @@
+simple_slam_node:
+  ros__parameters:
+    use_sim_time: true
+    map_frame: map
+    odom_frame: odom
+    published_frame: base_link
+    system_mode: mapping
+    enable_backend: false
+    publish_keyframe_markers: true
+    keyframe_marker_scale: 0.25
+    min_range: 0.05
+    max_range: 20.0
+    voxel_filter_size: 0.05
+    scans_per_accumulation: 1
+    active_submap_num_range_data: 90
+    min_range_points_for_match: 20
+    keyframe_translation_threshold: 0.20
+    keyframe_rotation_threshold: 0.17
+    linear_search_window: 0.3
+    angular_search_window: 0.35
+    linear_search_step: 0.05
+    angular_search_step: 0.05
+    translation_delta_cost_weight: 1.0
+    rotation_delta_cost_weight: 0.2
+    submap_resolution: 0.05
+    submap_width: 400
+    submap_height: 400
+    submap_hit_probability: 0.7
+    submap_miss_probability: 0.49
