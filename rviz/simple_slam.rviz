@@ -10,14 +10,14 @@ Panels:
   - Class: rviz_common/Time
     Name: Time
     SyncMode: 0
-    SyncSource: LaserScan
+    SyncSource: CurrentScan
 Visualization Manager:
   Class: ""
   Displays:
     - Class: rviz_default_plugins/Grid
       Name: Grid
       Enabled: true
-      Alpha: 0.35
+      Alpha: 0.25
       Cell Size: 1
       Color: 180; 180; 180
       Plane: XY
@@ -34,12 +34,48 @@ Visualization Manager:
       Frames:
         All Enabled: true
       Value: true
-    - Class: rviz_default_plugins/LaserScan
-      Name: LaserScan
+    - Class: rviz_default_plugins/PointCloud2
+      Name: CurrentScan
       Enabled: true
+      Alpha: 1
+      Autocompute Intensity Bounds: true
+      Autocompute Value Bounds:
+        Max Value: 10
+        Min Value: -10
+        Value: true
+      Axis: Z
+      Channel Name: intensity
+      Color: 53; 172; 164
+      Color Transformer: FlatColor
+      Decay Time: 0.001
+      Invert Rainbow: false
+      Max Color: 255; 255; 255
+      Max Intensity: 4096
+      Min Color: 0; 0; 0
+      Min Intensity: 0
+      Position Transformer: XYZ
+      Selectable: false
+      Size (Pixels): 3
+      Size (m): 0.03
+      Style: Flat Squares
       Topic:
-        Depth: 5
+        Depth: 1
         Durability Policy: Volatile
+        Filter size: 1
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /current_scan_cloud
+      Use Fixed Frame: true
+      Use rainbow: false
+      Value: true
+    - Class: rviz_default_plugins/LaserScan
+      Name: RawLaser
+      Enabled: false
+      Decay Time: 0.001
+      Topic:
+        Depth: 1
+        Durability Policy: Volatile
+        Filter size: 1
         History Policy: Keep Last
         Reliability Policy: Best Effort
         Value: /scan
@@ -47,11 +83,12 @@ Visualization Manager:
       Color: 53; 172; 164
       Style: Flat Squares
       Size (Pixels): 3
+      Use Fixed Frame: false
       Value: true
     - Class: rviz_default_plugins/Odometry
       Name: LaserOdometry
       Enabled: true
-      Keep: 120
+      Keep: 60
       Topic:
         Depth: 5
         Durability Policy: Volatile

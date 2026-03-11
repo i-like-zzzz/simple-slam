@@ -27,23 +27,25 @@ LocalSlamResult2D LocalSlamFrontend::AddScan(
   const nav_msgs::msg::Odometry * odom_msg)
 {
   LocalSlamResult2D result;
-  // 前端入口统一在这里完成：预处理、位姿预测、局部匹配、关键帧判定。
+  // 这一帧进来之后，前端的主要工作都在这里串起来：
+  // 先清理点云，再给出预测位姿，然后做匹配，最后判断要不要插关键帧。
   result.range_data = VoxelFilter(FilterScan(scan));
-
+  // TODO(zwc): 后面可以再补一层离群点剔除。
+  // 点太少时这一帧信息量不够，继续做 ICP 或子图匹配意义不大，先直接跳过。
   if (static_cast<int>(result.range_data.returns.size()) < options_.min_range_points_for_match) {
     return result;
   }
-
+  // 激光里程计的预测位姿，先用外部里程计增量，如果没有外部里程计再用激光里程计增量。
   const Pose2D predicted_pose = PredictPose(odom_msg);
   Pose2D lidar_odom_pose = predicted_pose;
   if (odom_msg == nullptr && has_previous_range_data_) {
-    // 没有外部里程计时，先靠 ICP 估计相邻两帧相对运动。
+    // 没有外部里程计时，先用相邻两帧做一次ICP，估一个大致运动。
     const Pose2D relative_lidar_motion = MatchToPreviousScan(result.range_data, lidar_odom_delta_);
     lidar_odom_delta_ = relative_lidar_motion;
     lidar_odom_pose = ComposePoses(lidar_odom_pose_estimate_, relative_lidar_motion);
   }
 
-  // 再把预测位姿送进活动子图匹配，得到更稳定的局部位姿。
+  // 有了预测位姿之后，再去和活动子图对齐，拿到这一帧最终采用的局部位姿。
   MaybeGrowActiveSubmaps(predicted_pose);
   result.local_pose = MatchToActiveSubmap(result.range_data, lidar_odom_pose);
 
@@ -62,7 +64,8 @@ LocalSlamResult2D LocalSlamFrontend::AddScan(
   }
 
   if (has_pose_estimate_) {
-    // 有外部里程计时，用局部位姿差分更新一个可观测的激光里程计轨迹。
+    // 如果外部里程计可用，就顺手把当前局部位姿变化记下来，
+    // 这样后面即便 /odom 暂时断掉，也还有一个最近的运动增量可以接着用。
     if (odom_msg != nullptr) {
       lidar_odom_delta_ = RelativePose(local_pose_estimate_, result.local_pose);
     }
@@ -102,17 +105,18 @@ RangeData2D LocalSlamFrontend::FilterScan(const sensor_msgs::msg::LaserScan & sc
 
   return data;
 }
-
+// 用一个很轻量的“按格子去重”方式把点云压稀一点，减少后面匹配的计算量。
 RangeData2D LocalSlamFrontend::VoxelFilter(const RangeData2D & range_data) const
 {
   if (options_.voxel_filter_size <= 0.0) {
     return range_data;
   }
 
-  // 使用固定网格做最轻量的降采样，先把前端稳定跑起来。
+  // 当前这里不是严格的体素质心滤波，而是把落在同一格子里的重复点合并掉。
   RangeData2D filtered;
   filtered.stamp = range_data.stamp;
   std::vector<Point2D> sorted_points = range_data.returns;
+  // 先按格子编号排序，这样同一个格子的点会排到一起。
   std::sort(
     sorted_points.begin(), sorted_points.end(),
     [this](const Point2D & lhs, const Point2D & rhs) {
@@ -140,7 +144,6 @@ RangeData2D LocalSlamFrontend::VoxelFilter(const RangeData2D & range_data) const
   }
   return filtered;
 }
-
 std::vector<Point2D> LocalSlamFrontend::DownsamplePoints(
   const std::vector<Point2D> & points,
   const int max_points) const
@@ -174,34 +177,64 @@ Pose2D LocalSlamFrontend::PoseFromOdom(const nav_msgs::msg::Odometry & odom_msg)
 
 Pose2D LocalSlamFrontend::PredictPose(const nav_msgs::msg::Odometry * odom_msg)
 {
-  // 预测项优先使用外部里程计；没有 /odom 时退回到激光里程计增量。
+  // 这个函数只做一件事：给当前帧匹配准备一个“从哪里开始搜”的初值。
+  // 它不决定最终位姿，最终结果还是要靠后面的匹配来修正。
+  //
+  // 目前前端手里有两类运动参考：
+  //
+  // 1. 外部里程计 /odom
+  //    这是首选。它一般来自轮速计或融合状态估计，短时间内通常比较平滑。
+  //
+  // 2. 激光里程计增量 lidar_odom_delta_
+  //    当 /odom 不可用时，就退回到上一拍激光匹配出来的相对运动。
+  //    它不是最终轨迹，只是为了让当前帧别总从原地开始搜。
+  //
+  // 整体原则很简单：
+  // - 有 /odom 就优先信 /odom
+  // - 没 /odom 就接着用激光里程计
+  // - 两边都没有，就只能先给一个保守初值
+
   if (!has_pose_estimate_) {
+    // 系统刚启动时，前端手里还没有任何历史位姿。
+    // 如果此时已经有 /odom，就直接拿 odom 当前值当第一帧初值。
     if (odom_msg != nullptr) {
       previous_odom_pose_ = PoseFromOdom(*odom_msg);
       has_previous_odom_ = true;
       return previous_odom_pose_;
     }
+
+    // 刚启动时连 /odom 都没有，那就只能从零位姿起步，后面再靠激光逐步带起来。
     return Pose2D{};
   }
 
   if (odom_msg != nullptr) {
+    // 这是最常见的路径：/odom 正常可用。
+    // 这里不会直接把 odom 当成 SLAM 结果，而是只取“上一拍到这一拍动了多少”，
+    // 再把这个增量叠到当前局部位姿上。
     const Pose2D current_odom_pose = PoseFromOdom(*odom_msg);
     if (!has_previous_odom_) {
+      // /odom 可能是中途才接进来的。
+      // 这时还算不出增量，先把当前值记下来，下一帧再正式开始用它做预测。
       previous_odom_pose_ = current_odom_pose;
       has_previous_odom_ = true;
       return local_pose_estimate_;
     }
 
+    // 先算出 /odom 这一拍相对上一拍的位姿变化。
     const Pose2D odom_delta = RelativePose(previous_odom_pose_, current_odom_pose);
     previous_odom_pose_ = current_odom_pose;
+
+    // 再把这个增量叠到当前局部轨迹上，作为当前帧匹配的起点。
     return ComposePoses(local_pose_estimate_, odom_delta);
   }
 
   if (!has_previous_range_data_) {
-    // 第一次没有 /odom 时先保持当前位姿，下一帧开始滚动激光里程计增量。
+    // 走到这里说明当前没有 /odom，只能靠激光里程计。
+    // 但如果连上一帧激光都没有，也还算不出相对运动，所以先保持当前位置不动。
     return local_pose_estimate_;
   }
 
+  // 没有 /odom，但前一帧激光还在，那就沿着最近一次激光估计出来的运动继续往前推。
   return ComposePoses(local_pose_estimate_, lidar_odom_delta_);
 }
 
