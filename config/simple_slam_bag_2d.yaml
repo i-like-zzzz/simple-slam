@@ -27,12 +27,14 @@ simple_slam_node:
     keyframe_translation_threshold: 0.20
     keyframe_rotation_threshold: 0.17
 
+    lidar_odom_matcher: point_to_point_icp
     lidar_odom_linear_window: 0.20
     lidar_odom_angular_window: 0.20
     lidar_odom_translation_weight: 1.0
     lidar_odom_rotation_weight: 0.2
     lidar_odom_point_sigma: 0.15
     lidar_odom_max_points: 48
+    lidar_odom_max_iterations: 40
 
     linear_search_window: 0.3
     angular_search_window: 0.35

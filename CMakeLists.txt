@@ -67,4 +67,28 @@ install(
   DESTINATION share/${PROJECT_NAME}
 )
 
+if(BUILD_TESTING)
+  find_package(ament_cmake_gtest REQUIRED)
+  find_package(ament_lint_auto REQUIRED)
+
+  ament_lint_auto_find_test_dependencies()
+
+  ament_add_gtest(test_local_slam_frontend
+    test/test_local_slam_frontend.cpp
+  )
+
+  target_link_libraries(test_local_slam_frontend
+    simple_slam_core
+    ${PCL_LIBRARIES}
+  )
+
+  ament_target_dependencies(test_local_slam_frontend
+    geometry_msgs
+    nav_msgs
+    sensor_msgs
+    tf2
+    tf2_geometry_msgs
+  )
+endif()
+
 ament_package()

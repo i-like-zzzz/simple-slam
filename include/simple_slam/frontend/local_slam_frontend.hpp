@@ -12,6 +12,13 @@
 namespace simple_slam
 {
 
+enum class LidarOdomMatcherType
+{
+  kPointToPointIcp,
+  kGeneralizedIcp,
+  kCorrelative
+};
+
 // 局部前端负责 scan 预处理、激光里程计和 scan-to-submap 对齐。
 class LocalSlamFrontend
 {
@@ -33,6 +40,8 @@ public:
     double lidar_odom_rotation_weight = 0.2;
     double lidar_odom_point_sigma = 0.15;
     int lidar_odom_max_points = 48;
+    int lidar_odom_max_iterations = 40;
+    LidarOdomMatcherType lidar_odom_matcher = LidarOdomMatcherType::kPointToPointIcp;
     SearchParameters2D scan_matcher;
     Submap2D::Options submap;
   };
@@ -69,6 +78,27 @@ private:
   // 基于相邻两帧点云做 ICP，估计相对运动。
   Pose2D MatchToPreviousScan(
     const RangeData2D & current_range_data,
+    const Pose2D & initial_relative_pose) const;
+
+  Pose2D MatchToPreviousScanPointToPointIcp(
+    const std::vector<Point2D> & current_points,
+    const std::vector<Point2D> & previous_points,
+    const Pose2D & initial_relative_pose) const;
+
+  Pose2D MatchToPreviousScanGeneralizedIcp(
+    const std::vector<Point2D> & current_points,
+    const std::vector<Point2D> & previous_points,
+    const Pose2D & initial_relative_pose) const;
+
+  Pose2D MatchToPreviousScanCorrelative(
+    const std::vector<Point2D> & current_points,
+    const std::vector<Point2D> & previous_points,
+    const Pose2D & initial_relative_pose) const;
+
+  double ScoreScanToScanCandidate(
+    const std::vector<Point2D> & current_points,
+    const std::vector<Point2D> & previous_points,
+    const Pose2D & candidate_relative_pose,
     const Pose2D & initial_relative_pose) const;
 
   // 基于活动子图做 scan-to-submap 粗匹配。
