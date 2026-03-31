@@ -1,3 +1,17 @@
+// Copyright 2026 zwc
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #ifndef SIMPLE_SLAM__FRONTEND__LOCAL_SLAM_FRONTEND_HPP_
 #define SIMPLE_SLAM__FRONTEND__LOCAL_SLAM_FRONTEND_HPP_
 
@@ -16,7 +30,8 @@ enum class LidarOdomMatcherType
 {
   kPointToPointIcp,
   kGeneralizedIcp,
-  kCorrelative
+  kCorrelative,
+  kCeres
 };
 
 // 局部前端负责 scan 预处理、激光里程计和 scan-to-submap 对齐。
@@ -41,6 +56,10 @@ public:
     double lidar_odom_point_sigma = 0.15;
     int lidar_odom_max_points = 48;
     int lidar_odom_max_iterations = 40;
+    double lidar_odom_ceres_max_correspondence_distance = 0.3;
+    double lidar_odom_ceres_huber_scale = 0.1;
+    int lidar_odom_ceres_max_num_iterations = 20;
+
     LidarOdomMatcherType lidar_odom_matcher = LidarOdomMatcherType::kPointToPointIcp;
     SearchParameters2D scan_matcher;
     Submap2D::Options submap;
@@ -91,6 +110,11 @@ private:
     const Pose2D & initial_relative_pose) const;
 
   Pose2D MatchToPreviousScanCorrelative(
+    const std::vector<Point2D> & current_points,
+    const std::vector<Point2D> & previous_points,
+    const Pose2D & initial_relative_pose) const;
+
+  Pose2D MatchToPreviousScanCeres(
     const std::vector<Point2D> & current_points,
     const std::vector<Point2D> & previous_points,
     const Pose2D & initial_relative_pose) const;

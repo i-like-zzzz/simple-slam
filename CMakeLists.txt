@@ -1,3 +1,17 @@
+# Copyright 2026 zwc
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 cmake_minimum_required(VERSION 3.8)
 project(simple_slam)
 
@@ -12,7 +26,7 @@ find_package(ament_cmake REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(PCL REQUIRED COMPONENTS common registration)
-find_package(rclcpp REQUIRED)
+find_package(Ceres REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
@@ -28,6 +42,7 @@ add_library(simple_slam_core
   src/backend/pose_graph_backend.cpp
   src/simple_slam_node.cpp
   src/frontend/local_slam_frontend.cpp
+  src/frontend/ceres_scan_matcher_2d.cpp
   src/mapping/submap_2d.cpp
   src/optimization/pose_graph_2d.cpp
 )
@@ -46,7 +61,10 @@ ament_target_dependencies(simple_slam_core
 add_executable(simple_slam_node src/simple_slam_node_main.cpp)
 target_link_libraries(simple_slam_node simple_slam_core)
 ament_target_dependencies(simple_slam_node rclcpp)
-target_link_libraries(simple_slam_core ${PCL_LIBRARIES})
+target_link_libraries(simple_slam_core
+  ${PCL_LIBRARIES}
+  Ceres::ceres
+)
 
 install(
   TARGETS
@@ -77,12 +95,29 @@ if(BUILD_TESTING)
     test/test_local_slam_frontend.cpp
   )
 
+  ament_add_gtest(test_ceres_scan_matcher_2d
+    test/test_ceres_scan_matcher_2d.cpp
+  )
+
   target_link_libraries(test_local_slam_frontend
     simple_slam_core
     ${PCL_LIBRARIES}
   )
 
+  target_link_libraries(test_ceres_scan_matcher_2d
+    simple_slam_core
+    ${PCL_LIBRARIES}
+  )
+
   ament_target_dependencies(test_local_slam_frontend
+    geometry_msgs
+    nav_msgs
+    sensor_msgs
+    tf2
+    tf2_geometry_msgs
+  )
+
+  ament_target_dependencies(test_ceres_scan_matcher_2d
     geometry_msgs
     nav_msgs
     sensor_msgs

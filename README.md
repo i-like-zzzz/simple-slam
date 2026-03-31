@@ -19,6 +19,15 @@
 
 后续迭代将逐步把 scan matching、约束构建和非线性优化填充进去。
 
+## 文档
+
+- `docs/config_reference.md`
+  当前参数说明。
+- `docs/development_notes.md`
+  当前实现的开发拆分和设计取舍。
+- `docs/correlative_scan_matching.md`
+  解释 `lidar_odom_matcher=correlative` 在 `simple_slam` 里的匹配流程、打分原理，以及它和 ICP / Ceres 的区别。
+
 ## 当前可观察话题
 
 - `/trajectory`

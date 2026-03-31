@@ -1,3 +1,17 @@
+// Copyright 2026 zwc
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #include <cmath>
 #include <limits>
 #include <vector>
@@ -49,10 +63,11 @@ LocalSlamFrontend::Options MakeOptions(LidarOdomMatcherType matcher_type)
 TEST(LocalSlamFrontendTest, RejectsScansWithTooFewPoints)
 {
   LocalSlamFrontend frontend(MakeOptions(LidarOdomMatcherType::kPointToPointIcp));
-  const auto sparse_scan = MakeScan({
-      1.0F,
-      std::numeric_limits<float>::infinity(),
-      1.2F});
+  const auto sparse_scan = MakeScan(
+      {
+        1.0F,
+        std::numeric_limits<float>::infinity(),
+        1.2F});
 
   const auto result = frontend.AddScan(sparse_scan, nullptr);
 
@@ -69,9 +84,10 @@ TEST(LocalSlamFrontendTest, SupportsAllLidarOdomMatchersOnRepeatedScans)
   const auto scan = MakeScan(dense_ranges);
 
   for (const auto matcher_type : {
-         LidarOdomMatcherType::kPointToPointIcp,
-         LidarOdomMatcherType::kGeneralizedIcp,
-         LidarOdomMatcherType::kCorrelative})
+        LidarOdomMatcherType::kPointToPointIcp,
+        LidarOdomMatcherType::kGeneralizedIcp,
+        LidarOdomMatcherType::kCorrelative,
+        LidarOdomMatcherType::kCeres})
   {
     LocalSlamFrontend frontend(MakeOptions(matcher_type));
 

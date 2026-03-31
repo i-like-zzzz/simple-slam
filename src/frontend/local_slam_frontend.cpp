@@ -1,9 +1,18 @@
-#include "simple_slam/frontend/local_slam_frontend.hpp"
+// Copyright 2026 zwc
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
-#include <algorithm>
-#include <chrono>
-#include <cmath>
-#include <limits>
+#include "simple_slam/frontend/local_slam_frontend.hpp"
 
 #include <Eigen/Core>
 #include <pcl/common/transforms.h>
@@ -11,7 +20,14 @@
 #include <pcl/point_types.h>
 #include <pcl/registration/gicp.h>
 #include <pcl/registration/icp.h>
+
+#include <algorithm>
+#include <chrono>
+#include <cmath>
+#include <limits>
+
 #include "rcutils/logging_macros.h"
+#include "simple_slam/frontend/ceres_scan_matcher_2d.hpp"
 #include "tf2_geometry_msgs/tf2_geometry_msgs.hpp"
 #include "tf2/utils.h"
 
@@ -47,10 +63,11 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr PointsToPointCloud(const std::vector<Point2D
   pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>());
   cloud->reserve(points.size());
   for (const auto & point : points) {
-    cloud->push_back(pcl::PointXYZ(
-      static_cast<float>(point.x),
-      static_cast<float>(point.y),
-      0.0F));
+    cloud->push_back(
+      pcl::PointXYZ(
+        static_cast<float>(point.x),
+        static_cast<float>(point.y),
+        0.0F));
   }
   return cloud;
 }
@@ -62,6 +79,8 @@ const char * MatcherTypeToString(const LidarOdomMatcherType matcher_type)
       return "generalized_icp";
     case LidarOdomMatcherType::kCorrelative:
       return "correlative";
+    case LidarOdomMatcherType::kCeres:
+      return "ceres";
     case LidarOdomMatcherType::kPointToPointIcp:
     default:
       return "point_to_point_icp";
@@ -151,9 +170,10 @@ RangeData2D LocalSlamFrontend::FilterScan(const sensor_msgs::msg::LaserScan & sc
   double angle = scan.angle_min;
   for (const float range : scan.ranges) {
     if (std::isfinite(range) && range >= options_.min_range && range <= options_.max_range) {
-      data.returns.push_back(Point2D{
-        static_cast<double>(range) * std::cos(angle),
-        static_cast<double>(range) * std::sin(angle)});
+      data.returns.push_back(
+        Point2D{
+          static_cast<double>(range) * std::cos(angle),
+          static_cast<double>(range) * std::sin(angle)});
     }
     angle += scan.angle_increment;
   }
@@ -211,7 +231,8 @@ std::vector<Point2D> LocalSlamFrontend::DownsamplePoints(
   std::vector<Point2D> sampled_points;
   sampled_points.reserve(static_cast<size_t>(max_points));
   const size_t stride = std::max<size_t>(1, points.size() / static_cast<size_t>(max_points));
-  for (size_t index = 0; index < points.size() && static_cast<int>(sampled_points.size()) < max_points;
+  for (size_t index = 0;
+    index < points.size() && static_cast<int>(sampled_points.size()) < max_points;
     index += stride)
   {
     sampled_points.push_back(points[index]);
@@ -242,7 +263,7 @@ Pose2D LocalSlamFrontend::PredictPose(const nav_msgs::msg::Odometry * odom_msg)
     }
     return Pose2D{};
   }
-  
+
   if (odom_msg != nullptr) {
     const Pose2D current_odom_pose = PoseFromOdom(*odom_msg);
     if (!has_previous_odom_) {
@@ -279,7 +300,7 @@ Pose2D LocalSlamFrontend::MatchToPreviousScan(
   if (current_points.empty() || previous_points.empty()) {
     return initial_relative_pose;
   }
-  //选择不同的匹配方式，默认使用icp进行匹配
+  // 选择不同的匹配方式，默认使用 icp 进行匹配。
   const auto match_start_time = std::chrono::steady_clock::now();
   Pose2D matched_pose;
   switch (options_.lidar_odom_matcher) {
@@ -289,6 +310,10 @@ Pose2D LocalSlamFrontend::MatchToPreviousScan(
       break;
     case LidarOdomMatcherType::kCorrelative:
       matched_pose = MatchToPreviousScanCorrelative(
+        current_points, previous_points, initial_relative_pose);
+      break;
+    case LidarOdomMatcherType::kCeres:
+      matched_pose = MatchToPreviousScanCeres(
         current_points, previous_points, initial_relative_pose);
       break;
     case LidarOdomMatcherType::kPointToPointIcp:
@@ -409,6 +434,20 @@ Pose2D LocalSlamFrontend::MatchToPreviousScanCorrelative(
   return best_pose;
 }
 
+Pose2D LocalSlamFrontend::MatchToPreviousScanCeres(
+  const std::vector<Point2D> & current_points,
+  const std::vector<Point2D> & previous_points,
+  const Pose2D & initial_relative_pose) const
+{
+  CeresScanMatcher2D::Options matcher_options;
+  matcher_options.huber_scale = options_.lidar_odom_ceres_huber_scale;
+  matcher_options.max_correspondence_distance =
+    options_.lidar_odom_ceres_max_correspondence_distance;
+  matcher_options.max_num_iterations = options_.lidar_odom_ceres_max_num_iterations;
+  CeresScanMatcher2D matcher(matcher_options);
+  return matcher.Match(current_points, previous_points, initial_relative_pose);
+}
+
 double LocalSlamFrontend::ScoreScanToScanCandidate(
   const std::vector<Point2D> & current_points,
   const std::vector<Point2D> & previous_points,
@@ -443,9 +482,9 @@ double LocalSlamFrontend::ScoreScanToScanCandidate(
   const double rotation_penalty = std::abs(
     NormalizeAngle(candidate_relative_pose.yaw - initial_relative_pose.yaw));
 
-  return score
-    - options_.lidar_odom_translation_weight * translation_penalty
-    - options_.lidar_odom_rotation_weight * rotation_penalty;
+  return score -
+         options_.lidar_odom_translation_weight * translation_penalty -
+         options_.lidar_odom_rotation_weight * rotation_penalty;
 }
 
 Pose2D LocalSlamFrontend::MatchToActiveSubmap(
@@ -482,7 +521,8 @@ Pose2D LocalSlamFrontend::MatchToActiveSubmap(
         candidate.y += dy;
         candidate.yaw = NormalizeAngle(candidate.yaw + yaw_delta);
 
-        const double score = ScoreCandidate(*matching_submap, range_data, candidate, predicted_pose);
+        const double score =
+          ScoreCandidate(*matching_submap, range_data, candidate, predicted_pose);
         if (score > best_score) {
           best_score = score;
           best_pose = candidate;
@@ -512,9 +552,9 @@ double LocalSlamFrontend::ScoreCandidate(
     std::hypot(candidate_pose.x - predicted_pose.x, candidate_pose.y - predicted_pose.y);
   const double rotation_penalty = std::abs(NormalizeAngle(candidate_pose.yaw - predicted_pose.yaw));
 
-  return score
-    - options_.scan_matcher.translation_delta_cost_weight * translation_penalty
-    - options_.scan_matcher.rotation_delta_cost_weight * rotation_penalty;
+  return score -
+         options_.scan_matcher.translation_delta_cost_weight * translation_penalty -
+         options_.scan_matcher.rotation_delta_cost_weight * rotation_penalty;
 }
 
 bool LocalSlamFrontend::ShouldCreateKeyframe(const Pose2D & matched_pose) const
@@ -528,7 +568,7 @@ bool LocalSlamFrontend::ShouldCreateKeyframe(const Pose2D & matched_pose) const
   const double rotation =
     std::abs(NormalizeAngle(matched_pose.yaw - last_keyframe_pose_.yaw));
   return translation >= options_.keyframe_translation_threshold ||
-    rotation >= options_.keyframe_rotation_threshold;
+         rotation >= options_.keyframe_rotation_threshold;
 }
 
 void LocalSlamFrontend::InsertIntoActiveSubmaps(

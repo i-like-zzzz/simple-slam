@@ -12,27 +12,32 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef SIMPLE_SLAM__BACKEND__POSE_GRAPH_BACKEND_HPP_
-#define SIMPLE_SLAM__BACKEND__POSE_GRAPH_BACKEND_HPP_
+#ifndef SIMPLE_SLAM__FRONTEND__CERES_SCAN_MATCHER_2D_HPP_
+#define SIMPLE_SLAM__FRONTEND__CERES_SCAN_MATCHER_2D_HPP_
+
+#include <vector>
 
 #include "simple_slam/types.hpp"
 
 namespace simple_slam
 {
 
-// 后端接口先独立出来，前端稳定后可以把回环、约束构建和优化逐步填进来。
-class PoseGraphBackend
+class CeresScanMatcher2D
 {
 public:
   struct Options
   {
-    bool enable_backend = false;
+    double max_correspondence_distance = 0.3;
+    double huber_scale = 0.1;
+    int max_num_iterations = 20;
   };
 
-  explicit PoseGraphBackend(Options options);
+  explicit CeresScanMatcher2D(Options options);
 
-  void AddLocalSlamResult(const LocalSlamResult2D & result);
-  bool enabled() const;
+  Pose2D Match(
+    const std::vector<Point2D> & current_points,
+    const std::vector<Point2D> & previous_points,
+    const Pose2D & initial_relative_pose) const;
 
 private:
   Options options_;
@@ -40,4 +45,4 @@ private:
 
 }  // namespace simple_slam
 
-#endif  // SIMPLE_SLAM__BACKEND__POSE_GRAPH_BACKEND_HPP_
+#endif  // SIMPLE_SLAM__FRONTEND__CERES_SCAN_MATCHER_2D_HPP_

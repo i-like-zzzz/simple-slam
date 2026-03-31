@@ -42,7 +42,8 @@ simple_slam_node:
     #   point_to_point_icp  默认的 PCL 点到点 ICP
     #   generalized_icp     对结构退化场景更稳一些，但更慢
     #   correlative         在预测位姿附近做离散搜索，不依赖 PCL ICP 收敛
-    lidar_odom_matcher: point_to_point_icp
+    #   ceres  基于 Ceres 的连续优化，理论上精度更高但需要更好的初始位姿
+    lidar_odom_matcher: ceres
     # 这些参数主要影响无 /odom 时的运动估计质量和实时性
     # point_sigma 同时作为最大对应距离和离群点剔除阈值的尺度
     lidar_odom_linear_window: 0.20
@@ -53,6 +54,10 @@ simple_slam_node:
     # ICP 输入点数上限，越大越稳但越慢
     lidar_odom_max_points: 48
     lidar_odom_max_iterations: 40
+    # ceres 相关参数
+    lidar_odom_ceres_max_correspondence_distance: 0.30
+    lidar_odom_ceres_huber_scale: 0.10
+    lidar_odom_ceres_max_num_iterations: 20
 
     # scan-to-submap 相关匹配参数
     # 当前这组参数控制的是局部粗搜索窗口与步长
