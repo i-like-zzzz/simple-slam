@@ -70,7 +70,7 @@ inline geometry_msgs::msg::Pose ToRosPose(const Pose2D & pose)
   return ros_pose;
 }
 
-// 把角度压回 [-pi, pi]，避免累计后出现跳变。
+// 归一化角度
 inline double NormalizeAngle(double angle)
 {
   while (angle > M_PI) {
@@ -107,14 +107,14 @@ inline Pose2D InversePose(const Pose2D & pose)
   return Pose2D{x, y, NormalizeAngle(-pose.yaw)};
 }
 
-// 位姿复合：先施加 lhs，再施加 rhs。
+// 位姿复合：先施加 lhs，再施加 rhs。 Ta->c = Tlhs * Trhs -------- Ta->c = Ta->b * Tb->c
 inline Pose2D ComposePoses(const Pose2D & lhs, const Pose2D & rhs)
 {
   const auto translated = TransformPoint(Point2D{rhs.x, rhs.y}, lhs);
   return Pose2D{translated.x, translated.y, NormalizeAngle(lhs.yaw + rhs.yaw)};
 }
 
-// 计算 from 到 to 的相对位姿。
+// 计算 from 到 to 的相对位姿。Tfrom->to
 inline Pose2D RelativePose(const Pose2D & from, const Pose2D & to)
 {
   return ComposePoses(InversePose(from), to);

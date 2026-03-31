@@ -37,7 +37,12 @@ simple_slam_node:
     keyframe_translation_threshold: 0.20
     keyframe_rotation_threshold: 0.17
 
-    # 相邻帧激光里程计（PCL ICP）参数
+    # 相邻帧激光里程计参数
+    # lidar_odom_matcher 可选:
+    #   point_to_point_icp  默认的 PCL 点到点 ICP
+    #   generalized_icp     对结构退化场景更稳一些，但更慢
+    #   correlative         在预测位姿附近做离散搜索，不依赖 PCL ICP 收敛
+    lidar_odom_matcher: point_to_point_icp
     # 这些参数主要影响无 /odom 时的运动估计质量和实时性
     # point_sigma 同时作为最大对应距离和离群点剔除阈值的尺度
     lidar_odom_linear_window: 0.20
@@ -47,6 +52,7 @@ simple_slam_node:
     lidar_odom_point_sigma: 0.15
     # ICP 输入点数上限，越大越稳但越慢
     lidar_odom_max_points: 48
+    lidar_odom_max_iterations: 40
 
     # scan-to-submap 相关匹配参数
     # 当前这组参数控制的是局部粗搜索窗口与步长
