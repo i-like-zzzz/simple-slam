@@ -1,3 +1,17 @@
+// Copyright 2026 zwc
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #include "simple_slam/optimization/pose_graph_2d.hpp"
 
 #include <algorithm>
@@ -16,10 +30,11 @@ void PoseGraph2D::AddNode(const LocalSlamResult2D & result)
     return;
   }
 
-  nodes_.push_back(TrajectoryNode2D{
-    next_node_id_++,
-    result.local_pose,
-    result.range_data});
+  nodes_.push_back(
+    TrajectoryNode2D{
+      next_node_id_++,
+      result.local_pose,
+      result.range_data});
 }
 
 const std::vector<TrajectoryNode2D> & PoseGraph2D::nodes() const

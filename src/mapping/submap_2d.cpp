@@ -1,3 +1,17 @@
+// Copyright 2026 zwc
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #include "simple_slam/mapping/submap_2d.hpp"
 
 #include <algorithm>
@@ -96,8 +110,10 @@ bool Submap2D::IsInside(const GridIndex & index) const
 std::optional<Submap2D::GridIndex> Submap2D::WorldToGrid(const Point2D & world_point) const
 {
   // 当前子图始终围绕 origin 附近展开，不做动态扩容。
-  const double origin_x = map_center_.x - 0.5 * static_cast<double>(options_.width) * options_.resolution;
-  const double origin_y = map_center_.y - 0.5 * static_cast<double>(options_.height) * options_.resolution;
+  const double origin_x = map_center_.x - 0.5 * static_cast<double>(options_.width) *
+    options_.resolution;
+  const double origin_y = map_center_.y - 0.5 * static_cast<double>(options_.height) *
+    options_.resolution;
   const int cell_x = static_cast<int>(std::floor((world_point.x - origin_x) / options_.resolution));
   const int cell_y = static_cast<int>(std::floor((world_point.y - origin_y) / options_.resolution));
   GridIndex index{cell_x, cell_y};
@@ -109,8 +125,10 @@ std::optional<Submap2D::GridIndex> Submap2D::WorldToGrid(const Point2D & world_p
 
 Point2D Submap2D::GridToWorld(const GridIndex & index) const
 {
-  const double origin_x = map_center_.x - 0.5 * static_cast<double>(options_.width) * options_.resolution;
-  const double origin_y = map_center_.y - 0.5 * static_cast<double>(options_.height) * options_.resolution;
+  const double origin_x = map_center_.x - 0.5 * static_cast<double>(options_.width) *
+    options_.resolution;
+  const double origin_y = map_center_.y - 0.5 * static_cast<double>(options_.height) *
+    options_.resolution;
   return Point2D{
     origin_x + (static_cast<double>(index.x) + 0.5) * options_.resolution,
     origin_y + (static_cast<double>(index.y) + 0.5) * options_.resolution};

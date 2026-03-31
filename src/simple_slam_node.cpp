@@ -1,3 +1,17 @@
+// Copyright 2026 zwc
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #include "simple_slam/simple_slam_node.hpp"
 
 #include <string>
@@ -52,6 +66,9 @@ LidarOdomMatcherType ParseLidarOdomMatcherType(
   if (matcher_name == "correlative") {
     return LidarOdomMatcherType::kCorrelative;
   }
+  if (matcher_name == "ceres") {
+    return LidarOdomMatcherType::kCeres;
+  }
   if (recognized != nullptr) {
     *recognized = false;
   }
@@ -65,6 +82,8 @@ const char * ToString(LidarOdomMatcherType matcher_type)
       return "generalized_icp";
     case LidarOdomMatcherType::kCorrelative:
       return "correlative";
+    case LidarOdomMatcherType::kCeres:
+      return "ceres";
     case LidarOdomMatcherType::kPointToPointIcp:
     default:
       return "point_to_point_icp";
@@ -147,9 +166,15 @@ SimpleSlamNode::SimpleSlamNode()
     active_submap_num_range_data,
     declare_parameter("submap_hit_probability", 0.7),
     declare_parameter("submap_miss_probability", 0.49)};
-
+  frontend_options.lidar_odom_ceres_max_correspondence_distance =
+    declare_parameter("lidar_odom_ceres_max_correspondence_distance", 0.3);
+  frontend_options.lidar_odom_ceres_huber_scale =
+    declare_parameter("lidar_odom_ceres_huber_scale", 0.1);
+  frontend_options.lidar_odom_ceres_max_num_iterations =
+    static_cast<int>(declare_parameter("lidar_odom_ceres_max_num_iterations", 20));
   frontend_ = std::make_unique<LocalSlamFrontend>(frontend_options);
-  pose_graph_ = std::make_unique<PoseGraph2D>(PoseGraph2D::Options{
+  pose_graph_ = std::make_unique<PoseGraph2D>(
+    PoseGraph2D::Options{
       active_submap_num_range_data});
   backend_ = std::make_unique<PoseGraphBackend>(PoseGraphBackend::Options{enable_backend});
 
@@ -158,7 +183,8 @@ SimpleSlamNode::SimpleSlamNode()
   path_pub_ = create_publisher<nav_msgs::msg::Path>("trajectory", 10);
   // 单独发布激光里程计，便于和最终局部位姿做对比。
   laser_odom_pub_ = create_publisher<nav_msgs::msg::Odometry>("laser_odom", 10);
-  current_scan_cloud_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>("current_scan_cloud", 10);
+  current_scan_cloud_pub_ =
+    create_publisher<sensor_msgs::msg::PointCloud2>("current_scan_cloud", 10);
   keyframe_marker_pub_ = create_publisher<visualization_msgs::msg::MarkerArray>("keyframes", 10);
   tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
   tf_buffer_ = std::make_unique<tf2_ros::Buffer>(get_clock());
@@ -183,12 +209,12 @@ SimpleSlamNode::SimpleSlamNode()
     publish_keyframe_markers_ ? "on" : "off",
     published_frame_.c_str(),
     ToString(lidar_odom_matcher));
-  }
+}
 
 void SimpleSlamNode::HandleScan(const sensor_msgs::msg::LaserScan::SharedPtr msg)
 {
   const nav_msgs::msg::Odometry * odom_ptr = latest_odom_ ? &(*latest_odom_) : nullptr;
-  //前端处理得到位姿
+  // 前端处理得到位姿。
   auto result = frontend_->AddScan(*msg, odom_ptr);
   if (!result.valid) {
     return;
