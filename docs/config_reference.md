@@ -57,16 +57,31 @@
 
 这一组在没有外部 `/odom` 时最重要。
 
+- `lidar_odom_matcher`
+  可选 `point_to_point_icp`、`generalized_icp`、`correlative`。
+  `point_to_point_icp` 是当前默认值，速度和依赖都最简单。
+  `generalized_icp` 对重复结构和局部退化通常更稳一些，但开销更大。
+  `correlative` 会围绕预测增量做离散搜索，对初值方向更直接，但窗口过大时会明显变慢。
 - `lidar_odom_point_sigma`
-  影响 ICP 的对应点距离阈值。这个值太小，容易不收敛；太大，容易对上错误结构。
+  在 `point_to_point_icp` 和 `generalized_icp` 下，影响最大对应距离和离群点剔除阈值。
+  在 `correlative` 下，它决定点到点距离分数衰减速度。这个值太小，容易过于挑剔；太大，容易对上错误结构。
 - `lidar_odom_max_points`
-  送进 ICP 的最大点数。默认 `48` 是为了 bag 回放时控制算力。
+  送进帧间匹配器的最大点数。默认 `48` 是为了 bag 回放时控制算力。
+- `lidar_odom_max_iterations`
+  `point_to_point_icp` 和 `generalized_icp` 的最大迭代次数。
 - `lidar_odom_linear_window`
 - `lidar_odom_angular_window`
 - `lidar_odom_translation_weight`
 - `lidar_odom_rotation_weight`
 
-这四个参数目前保留下来，是为了后面继续强化“预测项约束”时不用改配置结构。当前 ICP 版本真正最敏感的还是 `lidar_odom_point_sigma` 和 `lidar_odom_max_points`。
+这四个参数现在主要服务 `correlative` 模式：
+
+- `lidar_odom_linear_window` / `lidar_odom_angular_window`
+  围绕预测增量搜索的平移和旋转范围。
+- `lidar_odom_translation_weight` / `lidar_odom_rotation_weight`
+  候选解偏离预测增量时的惩罚项权重。
+
+如果你用的是 ICP / GICP，当前真正最敏感的还是 `lidar_odom_point_sigma`、`lidar_odom_max_points` 和 `lidar_odom_max_iterations`。
 
 ## 6. scan-to-submap 匹配参数
 

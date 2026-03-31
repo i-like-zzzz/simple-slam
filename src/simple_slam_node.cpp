@@ -36,6 +36,41 @@ Pose2D PoseFromTransform(const geometry_msgs::msg::Transform & transform)
   return pose;
 }
 
+LidarOdomMatcherType ParseLidarOdomMatcherType(
+  const std::string & matcher_name,
+  bool * recognized = nullptr)
+{
+  if (recognized != nullptr) {
+    *recognized = true;
+  }
+  if (matcher_name == "point_to_point_icp") {
+    return LidarOdomMatcherType::kPointToPointIcp;
+  }
+  if (matcher_name == "generalized_icp") {
+    return LidarOdomMatcherType::kGeneralizedIcp;
+  }
+  if (matcher_name == "correlative") {
+    return LidarOdomMatcherType::kCorrelative;
+  }
+  if (recognized != nullptr) {
+    *recognized = false;
+  }
+  return LidarOdomMatcherType::kPointToPointIcp;
+}
+
+const char * ToString(LidarOdomMatcherType matcher_type)
+{
+  switch (matcher_type) {
+    case LidarOdomMatcherType::kGeneralizedIcp:
+      return "generalized_icp";
+    case LidarOdomMatcherType::kCorrelative:
+      return "correlative";
+    case LidarOdomMatcherType::kPointToPointIcp:
+    default:
+      return "point_to_point_icp";
+  }
+}
+
 }  // namespace
 
 SimpleSlamNode::SimpleSlamNode()
@@ -57,37 +92,63 @@ SimpleSlamNode::SimpleSlamNode()
   const auto active_submap_num_range_data =
     static_cast<int>(declare_parameter("active_submap_num_range_data", 90));
   const bool enable_map_update = system_mode_ == SystemMode::kMapping;
+  const auto lidar_odom_matcher_name =
+    declare_parameter("lidar_odom_matcher", std::string("point_to_point_icp"));
+  bool lidar_odom_matcher_recognized = false;
+  const auto lidar_odom_matcher = ParseLidarOdomMatcherType(
+    lidar_odom_matcher_name, &lidar_odom_matcher_recognized);
+  if (!lidar_odom_matcher_recognized) {
+    RCLCPP_WARN(
+      get_logger(),
+      "unknown lidar_odom_matcher '%s', falling back to point_to_point_icp",
+      lidar_odom_matcher_name.c_str());
+  }
 
-  frontend_ = std::make_unique<LocalSlamFrontend>(LocalSlamFrontend::Options{
-      declare_parameter("min_range", 0.05),
-      declare_parameter("max_range", 20.0),
-      declare_parameter("voxel_filter_size", 0.05),
-      static_cast<int>(declare_parameter("scans_per_accumulation", 1)),
-      active_submap_num_range_data,
-      static_cast<int>(declare_parameter("min_range_points_for_match", 20)),
-      enable_map_update,
-      declare_parameter("keyframe_translation_threshold", 0.2),
-      declare_parameter("keyframe_rotation_threshold", 0.17),
-      declare_parameter("lidar_odom_linear_window", 0.2),
-      declare_parameter("lidar_odom_angular_window", 0.2),
-      declare_parameter("lidar_odom_translation_weight", 1.0),
-      declare_parameter("lidar_odom_rotation_weight", 0.2),
-      declare_parameter("lidar_odom_point_sigma", 0.15),
-      static_cast<int>(declare_parameter("lidar_odom_max_points", 48)),
-      SearchParameters2D{
-        declare_parameter("linear_search_window", 0.3),
-        declare_parameter("angular_search_window", 0.35),
-        declare_parameter("linear_search_step", 0.05),
-        declare_parameter("angular_search_step", 0.05),
-        declare_parameter("translation_delta_cost_weight", 1.0),
-        declare_parameter("rotation_delta_cost_weight", 0.2)},
-      Submap2D::Options{
-        declare_parameter("submap_resolution", 0.05),
-        static_cast<int>(declare_parameter("submap_width", 400)),
-        static_cast<int>(declare_parameter("submap_height", 400)),
-        active_submap_num_range_data,
-        declare_parameter("submap_hit_probability", 0.7),
-        declare_parameter("submap_miss_probability", 0.49)}});
+  LocalSlamFrontend::Options frontend_options;
+  frontend_options.min_range = declare_parameter("min_range", 0.05);
+  frontend_options.max_range = declare_parameter("max_range", 20.0);
+  frontend_options.voxel_filter_size = declare_parameter("voxel_filter_size", 0.05);
+  frontend_options.scans_per_accumulation =
+    static_cast<int>(declare_parameter("scans_per_accumulation", 1));
+  frontend_options.active_submap_num_range_data = active_submap_num_range_data;
+  frontend_options.min_range_points_for_match =
+    static_cast<int>(declare_parameter("min_range_points_for_match", 20));
+  frontend_options.enable_map_update = enable_map_update;
+  frontend_options.keyframe_translation_threshold =
+    declare_parameter("keyframe_translation_threshold", 0.2);
+  frontend_options.keyframe_rotation_threshold =
+    declare_parameter("keyframe_rotation_threshold", 0.17);
+  frontend_options.lidar_odom_linear_window =
+    declare_parameter("lidar_odom_linear_window", 0.2);
+  frontend_options.lidar_odom_angular_window =
+    declare_parameter("lidar_odom_angular_window", 0.2);
+  frontend_options.lidar_odom_translation_weight =
+    declare_parameter("lidar_odom_translation_weight", 1.0);
+  frontend_options.lidar_odom_rotation_weight =
+    declare_parameter("lidar_odom_rotation_weight", 0.2);
+  frontend_options.lidar_odom_point_sigma =
+    declare_parameter("lidar_odom_point_sigma", 0.15);
+  frontend_options.lidar_odom_max_points =
+    static_cast<int>(declare_parameter("lidar_odom_max_points", 48));
+  frontend_options.lidar_odom_max_iterations =
+    static_cast<int>(declare_parameter("lidar_odom_max_iterations", 40));
+  frontend_options.lidar_odom_matcher = lidar_odom_matcher;
+  frontend_options.scan_matcher = SearchParameters2D{
+    declare_parameter("linear_search_window", 0.3),
+    declare_parameter("angular_search_window", 0.35),
+    declare_parameter("linear_search_step", 0.05),
+    declare_parameter("angular_search_step", 0.05),
+    declare_parameter("translation_delta_cost_weight", 1.0),
+    declare_parameter("rotation_delta_cost_weight", 0.2)};
+  frontend_options.submap = Submap2D::Options{
+    declare_parameter("submap_resolution", 0.05),
+    static_cast<int>(declare_parameter("submap_width", 400)),
+    static_cast<int>(declare_parameter("submap_height", 400)),
+    active_submap_num_range_data,
+    declare_parameter("submap_hit_probability", 0.7),
+    declare_parameter("submap_miss_probability", 0.49)};
+
+  frontend_ = std::make_unique<LocalSlamFrontend>(frontend_options);
   pose_graph_ = std::make_unique<PoseGraph2D>(PoseGraph2D::Options{
       active_submap_num_range_data});
   backend_ = std::make_unique<PoseGraphBackend>(PoseGraphBackend::Options{enable_backend});
@@ -115,16 +176,19 @@ SimpleSlamNode::SimpleSlamNode()
 
   RCLCPP_INFO(
     get_logger(),
-    "simple_slam_node started, mode=%s, backend=%s, keyframe_markers=%s, published_frame=%s",
+    "simple_slam_node started, mode=%s, backend=%s, keyframe_markers=%s, published_frame=%s, "
+    "lidar_odom_matcher=%s",
     ToString(system_mode_),
     backend_->enabled() ? "on" : "off",
     publish_keyframe_markers_ ? "on" : "off",
-    published_frame_.c_str());
-}
+    published_frame_.c_str(),
+    ToString(lidar_odom_matcher));
+  }
 
 void SimpleSlamNode::HandleScan(const sensor_msgs::msg::LaserScan::SharedPtr msg)
 {
   const nav_msgs::msg::Odometry * odom_ptr = latest_odom_ ? &(*latest_odom_) : nullptr;
+  //前端处理得到位姿
   auto result = frontend_->AddScan(*msg, odom_ptr);
   if (!result.valid) {
     return;
