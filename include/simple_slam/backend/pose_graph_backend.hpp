@@ -17,24 +17,21 @@
 
 #include "simple_slam/types.hpp"
 
-namespace simple_slam
-{
+namespace simple_slam {
 
 // 后端接口先独立出来，前端稳定后可以把回环、约束构建和优化逐步填进来。
-class PoseGraphBackend
-{
-public:
-  struct Options
-  {
+class PoseGraphBackend {
+ public:
+  struct Options {
     bool enable_backend = false;
   };
 
   explicit PoseGraphBackend(Options options);
 
-  void AddLocalSlamResult(const LocalSlamResult2D & result);
+  void AddLocalSlamResult(const LocalSlamResult2D& result);
   bool enabled() const;
 
-private:
+ private:
   Options options_;
 };
 

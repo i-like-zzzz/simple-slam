@@ -20,13 +20,10 @@
 #include "sensor_msgs/msg/laser_scan.hpp"
 #include "simple_slam/frontend/local_slam_frontend.hpp"
 
-namespace simple_slam
-{
-namespace
-{
+namespace simple_slam {
+namespace {
 
-sensor_msgs::msg::LaserScan MakeScan(const std::vector<float> & ranges)
-{
+sensor_msgs::msg::LaserScan MakeScan(const std::vector<float>& ranges) {
   sensor_msgs::msg::LaserScan scan;
   scan.header.frame_id = "laser";
   scan.angle_min = -0.5F;
@@ -37,8 +34,7 @@ sensor_msgs::msg::LaserScan MakeScan(const std::vector<float> & ranges)
   return scan;
 }
 
-LocalSlamFrontend::Options MakeOptions(LidarOdomMatcherType matcher_type)
-{
+LocalSlamFrontend::Options MakeOptions(LidarOdomMatcherType matcher_type) {
   LocalSlamFrontend::Options options;
   options.voxel_filter_size = 0.0;
   options.min_range_points_for_match = 4;
@@ -60,22 +56,18 @@ LocalSlamFrontend::Options MakeOptions(LidarOdomMatcherType matcher_type)
   return options;
 }
 
-TEST(LocalSlamFrontendTest, RejectsScansWithTooFewPoints)
-{
-  LocalSlamFrontend frontend(MakeOptions(LidarOdomMatcherType::kPointToPointIcp));
-  const auto sparse_scan = MakeScan(
-      {
-        1.0F,
-        std::numeric_limits<float>::infinity(),
-        1.2F});
+TEST(LocalSlamFrontendTest, RejectsScansWithTooFewPoints) {
+  LocalSlamFrontend frontend(
+      MakeOptions(LidarOdomMatcherType::kPointToPointIcp));
+  const auto sparse_scan =
+      MakeScan({1.0F, std::numeric_limits<float>::infinity(), 1.2F});
 
   const auto result = frontend.AddScan(sparse_scan, nullptr);
 
   EXPECT_FALSE(result.valid);
 }
 
-TEST(LocalSlamFrontendTest, SupportsAllLidarOdomMatchersOnRepeatedScans)
-{
+TEST(LocalSlamFrontendTest, SupportsAllLidarOdomMatchersOnRepeatedScans) {
   std::vector<float> dense_ranges;
   dense_ranges.reserve(32);
   for (int index = 0; index < 32; ++index) {
@@ -83,12 +75,10 @@ TEST(LocalSlamFrontendTest, SupportsAllLidarOdomMatchersOnRepeatedScans)
   }
   const auto scan = MakeScan(dense_ranges);
 
-  for (const auto matcher_type : {
-        LidarOdomMatcherType::kPointToPointIcp,
+  for (const auto matcher_type :
+       {LidarOdomMatcherType::kPointToPointIcp,
         LidarOdomMatcherType::kGeneralizedIcp,
-        LidarOdomMatcherType::kCorrelative,
-        LidarOdomMatcherType::kCeres})
-  {
+        LidarOdomMatcherType::kCorrelative, LidarOdomMatcherType::kCeres}) {
     LocalSlamFrontend frontend(MakeOptions(matcher_type));
 
     const auto first_result = frontend.AddScan(scan, nullptr);

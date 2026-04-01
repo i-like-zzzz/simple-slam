@@ -20,11 +20,12 @@
 #include <string>
 #include <vector>
 
+#include "nav_msgs/msg/occupancy_grid.hpp"
 #include "nav_msgs/msg/odometry.hpp"
 #include "nav_msgs/msg/path.hpp"
 #include "rclcpp/rclcpp.hpp"
-#include "sensor_msgs/msg/point_cloud2.hpp"
 #include "sensor_msgs/msg/laser_scan.hpp"
+#include "sensor_msgs/msg/point_cloud2.hpp"
 #include "simple_slam/backend/pose_graph_backend.hpp"
 #include "simple_slam/frontend/local_slam_frontend.hpp"
 #include "simple_slam/optimization/pose_graph_2d.hpp"
@@ -34,16 +35,14 @@
 #include "tf2_ros/transform_listener.h"
 #include "visualization_msgs/msg/marker_array.hpp"
 
-namespace simple_slam
-{
+namespace simple_slam {
 
 // ROS 2 包装节点：负责订阅传感器、驱动前端，并发布调试结果。
-class SimpleSlamNode : public rclcpp::Node
-{
-public:
+class SimpleSlamNode : public rclcpp::Node {
+ public:
   SimpleSlamNode();
 
-private:
+ private:
   // 处理一帧激光，并驱动一次局部 SLAM 更新。
   void HandleScan(const sensor_msgs::msg::LaserScan::SharedPtr msg);
 
@@ -51,17 +50,36 @@ private:
   void HandleOdom(const nav_msgs::msg::Odometry::SharedPtr msg);
 
   // 统一发布路径、激光里程计和 TF。
-  void PublishOutputs(const LocalSlamResult2D & result, const std::string & scan_frame);
+  void PublishOutputs(const LocalSlamResult2D& result,
+                      const std::string& scan_frame);
 
   // 发布关键帧箭头，方便在 RViz 里观察插帧位置。
-  void PublishKeyframeMarkers(const Pose2D & pose, const rclcpp::Time & stamp);
+  void PublishKeyframeMarkers(const Pose2D& pose, const rclcpp::Time& stamp);
+
+  // 发布子图转化为 ROS 2 OccupancyGrid 消息，方便在 RViz 中显示。
+  void PublishActiveSubmap(const rclcpp::Time& stamp);
+
+  // 发布全局地图
+  void PublishGlobalMap(const rclcpp::Time& stamp);
+
+  // 发布局部地图
+  void PublishLocalMap(const rclcpp::Time& stamp);
+
+  nav_msgs::msg::OccupancyGrid BuildMergedMap(
+      const std::vector<std::shared_ptr<Submap2D>>& submaps,
+      const rclcpp::Time& stamp) const;
 
   rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr scan_sub_;
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
   rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr path_pub_;
   rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr laser_odom_pub_;
-  rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr current_scan_cloud_pub_;
-  rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr keyframe_marker_pub_;
+  rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr
+      current_scan_cloud_pub_;
+  rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr
+      keyframe_marker_pub_;
+  rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr active_submap_pub_;
+  rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr global_map_pub_;
+  rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr local_map_pub_;
   std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
   std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
   std::shared_ptr<tf2_ros::TransformListener> tf_listener_;

@@ -12,7 +12,7 @@
   当前节点会发布 `map -> odom_frame` 变换；如果接入了外部 `/odom` 或已有 TF 树，
   这里决定地图坐标系最终挂到哪一层底盘树上。
 - `published_frame`
-  当前局部位姿、`laser_odom` 和关键帧可视化都会以这个 frame 为主。
+  当前局部位姿、`laser_odom`、`current_scan_cloud` 和关键帧可视化都会以这个 frame 为主。
 
 ## 2. 系统模式与调试
 
@@ -58,13 +58,14 @@
 这一组在没有外部 `/odom` 时最重要。
 
 - `lidar_odom_matcher`
-  可选 `point_to_point_icp`、`generalized_icp`、`correlative`。
-  `point_to_point_icp` 是当前默认值，速度和依赖都最简单。
-  `generalized_icp` 对重复结构和局部退化通常更稳一些，但开销更大。
-  `correlative` 会围绕预测增量做离散搜索，对初值方向更直接，但窗口过大时会明显变慢。
+  可选 `point_to_point_icp`、`generalized_icp`、`correlative`、`ceres`。
+  `point_to_point_icp` 依赖最少；
+  `generalized_icp` 对退化结构通常更稳；
+  `correlative` 适合围绕预测增量做离散搜索；
+  `ceres` 走连续优化，对初值质量更敏感。
 - `lidar_odom_point_sigma`
   在 `point_to_point_icp` 和 `generalized_icp` 下，影响最大对应距离和离群点剔除阈值。
-  在 `correlative` 下，它决定点到点距离分数衰减速度。这个值太小，容易过于挑剔；太大，容易对上错误结构。
+  在 `correlative` 下，它决定点到点距离分数衰减速度。
 - `lidar_odom_max_points`
   送进帧间匹配器的最大点数。默认 `48` 是为了 bag 回放时控制算力。
 - `lidar_odom_max_iterations`
@@ -80,6 +81,12 @@
   围绕预测增量搜索的平移和旋转范围。
 - `lidar_odom_translation_weight` / `lidar_odom_rotation_weight`
   候选解偏离预测增量时的惩罚项权重。
+
+- `lidar_odom_ceres_max_correspondence_distance`
+- `lidar_odom_ceres_huber_scale`
+- `lidar_odom_ceres_max_num_iterations`
+
+这三个参数只服务 `ceres` 模式。
 
 如果你用的是 ICP / GICP，当前真正最敏感的还是 `lidar_odom_point_sigma`、`lidar_odom_max_points` 和 `lidar_odom_max_iterations`。
 
@@ -111,38 +118,16 @@
 - `submap_miss_probability`
   控制占据/空闲更新力度。
 
+当前实现里，这些参数控制的是固定大小、world 轴对齐的活动子图，不是最终的 Cartographer 风格旋转子图。
+
 ## 8. 建议的调参顺序
 
 如果你现在要针对一包新 bag 调试，建议按这个顺序来：
 
-1. 先确认 `/scan`、`/laser_odom`、`/trajectory`、`/keyframes` 都有输出
+1. 先确认 `/scan`、`/laser_odom`、`/trajectory`、`/current_scan_cloud`、`/keyframes` 都有输出
 2. 再调 `voxel_filter_size` 和 `lidar_odom_max_points`，先把实时性跑顺
 3. 再调 `lidar_odom_point_sigma`，让激光里程计不要明显发散
 4. 再调关键帧阈值
 5. 最后才去改 scan-to-submap 的搜索窗口和步长
 
 如果一上来就去大改子图窗口，通常会把问题越调越乱。
-
-
-
-
-
-
-产品提供文档
-文档 -> rag 
-程序员用rag ->系统开发 
-提供开发文档 ->rag
-
-部署cicd  issue -> 代码 ->文档 ->rag
- 
-研发干掉
-
-招现场使用ai 访问 rag -> 定制化
-有问题 issue -> cicd 来优化 
-
-10个研发 变成 0.5个
-10个现场 变成 1个
-
-
-
-
