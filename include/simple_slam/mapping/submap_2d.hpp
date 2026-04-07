@@ -40,8 +40,13 @@ class Submap2D {
   void InsertRangeData(const RangeData2D& range_data, const Pose2D& local_pose);
   bool IsFinished() const;
   int id() const;
+  
   int num_insertions() const;
-  const Pose2D& origin() const;
+  
+  const Pose2D& global_pose() const;
+
+  void SetGlobalPose(const Pose2D& pose);
+
   int GetWidth() const { return options_.width; }
   int GetHeight() const { return options_.height; }
   Point2D GetLowerLeftCorner() const;
@@ -63,16 +68,22 @@ class Submap2D {
 
   int ToFlatIndex(const GridIndex& index) const;
   bool IsInside(const GridIndex& index) const;
-  std::optional<GridIndex> WorldToGrid(const Point2D& world_point) const;
-  Point2D GridToWorld(const GridIndex& index) const;
+  Point2D WorldToLocal(const Point2D& world_point) const;
+  Point2D LocalToWorld(const Point2D& local_point) const;
+  std::optional<GridIndex> LocalToGrid(const Point2D& local_point) const;
+  Point2D GridToLocal(const GridIndex& index) const;
   void UpdateCell(const GridIndex& index, double delta);
-  void CastRay(const Point2D& start, const Point2D& end);
+  void CastRay(const Point2D& start_local, const Point2D& end_local);
 
   int id_;
   Options options_;
   int num_insertions_ = 0;
-  Pose2D origin_;
-  Point2D map_center_;
+  // Pose2D origin_;
+  // submap在map的全局位姿，后端优化会优化这个位姿
+  Pose2D global_pose_;
+  //submap左下角的坐标，用于坐标转换，保持不变
+  Point2D local_map_origin_;
+  // Point2D map_center_;
   std::vector<double> log_odds_cells_;
   std::vector<bool> known_cells_;
 };

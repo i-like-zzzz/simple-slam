@@ -37,8 +37,9 @@ double LogOddsToProbability(const double log_odds) {
 Submap2D::Submap2D(int id, Options options, const Pose2D& initial_pose)
     : id_(id),
       options_(options),
-      origin_(initial_pose),
-      map_center_{initial_pose.x, initial_pose.y},
+      global_pose_(initial_pose),
+      local_map_origin_{-0.5 * options.width * options.resolution , 
+                        -0.5 * options.height * options.resolution},
       log_odds_cells_(static_cast<size_t>(options.width * options.height), 0.0),
       known_cells_(static_cast<size_t>(options.width * options.height), false) {
 }
@@ -46,10 +47,13 @@ Submap2D::Submap2D(int id, Options options, const Pose2D& initial_pose)
 void Submap2D::InsertRangeData(const RangeData2D& range_data,
                                const Pose2D& local_pose) {
   // 子图内部统一使用局部地图坐标，便于后面接后端优化后的位姿修正。
-  const Point2D sensor_origin{local_pose.x, local_pose.y};
+  const Point2D sensor_origin_world{local_pose.x, local_pose.y};
+  const Point2D sensor_origin_local = WorldToLocal(sensor_origin_world);
+
   for (const auto& hit_in_sensor : range_data.returns) {
     const Point2D hit_in_world = TransformPoint(hit_in_sensor, local_pose);
-    CastRay(sensor_origin, hit_in_world);
+    const Point2D hit_in_local = WorldToLocal(hit_in_world);
+    CastRay(sensor_origin_local, hit_in_local);
   }
   ++num_insertions_;
 }
@@ -63,17 +67,19 @@ int Submap2D::id() const { return id_; }
 
 int Submap2D::num_insertions() const { return num_insertions_; }
 
-const Pose2D& Submap2D::origin() const { return origin_; }
+const Pose2D& Submap2D::global_pose() const { return global_pose_; }
+
+void Submap2D::SetGlobalPose(const Pose2D& pose) {
+  global_pose_ = pose;
+}
 // 获取子图左下角在世界坐标系中的位置。
 Point2D Submap2D::GetLowerLeftCorner() const {
-  return Point2D{map_center_.x - 0.5 * static_cast<double>(options_.width) *
-                                     options_.resolution,
-                 map_center_.y - 0.5 * static_cast<double>(options_.height) *
-                                     options_.resolution};
+  return LocalToWorld(local_map_origin_);
 }
 
 double Submap2D::GetProbability(const Point2D& world_point) const {
-  const auto index = WorldToGrid(world_point);
+  const auto local_point = WorldToLocal(world_point);
+  const auto index = LocalToGrid(local_point);
   if (!index.has_value()) {
     return 0.1;
   }
@@ -93,36 +99,33 @@ bool Submap2D::IsInside(const GridIndex& index) const {
          index.y < options_.height;
 }
 
-std::optional<Submap2D::GridIndex> Submap2D::WorldToGrid(
-    const Point2D& world_point) const {
-  // 当前子图始终围绕 origin 附近展开，不做动态扩容。
-  const double origin_x =
-      map_center_.x -
-      0.5 * static_cast<double>(options_.width) * options_.resolution;
-  const double origin_y =
-      map_center_.y -
-      0.5 * static_cast<double>(options_.height) * options_.resolution;
-  const int cell_x = static_cast<int>(
-      std::floor((world_point.x - origin_x) / options_.resolution));
-  const int cell_y = static_cast<int>(
-      std::floor((world_point.y - origin_y) / options_.resolution));
-  GridIndex index{cell_x, cell_y};
-  if (!IsInside(index)) {
-    return std::nullopt;
-  }
-  return index;
+Point2D Submap2D::WorldToLocal(const Point2D& world_point) const {
+  return TransformPoint(world_point, InversePose(global_pose_));
 }
 
-Point2D Submap2D::GridToWorld(const GridIndex& index) const {
-  const double origin_x =
-      map_center_.x -
-      0.5 * static_cast<double>(options_.width) * options_.resolution;
-  const double origin_y =
-      map_center_.y -
-      0.5 * static_cast<double>(options_.height) * options_.resolution;
-  return Point2D{
-      origin_x + (static_cast<double>(index.x) + 0.5) * options_.resolution,
-      origin_y + (static_cast<double>(index.y) + 0.5) * options_.resolution};
+Point2D Submap2D::LocalToWorld(const Point2D& local_point) const {
+  return TransformPoint(local_point, global_pose_);
+}
+
+std::optional<Submap2D::GridIndex> Submap2D::LocalToGrid(
+    const Point2D& local_point) const {
+    const int cell_x = static_cast<int>(
+      std::floor((local_point.x - local_map_origin_.x) / options_.resolution));
+      const int cell_y = static_cast<int>(
+        std::floor((local_point.y - local_map_origin_.y) / options_.resolution));
+    GridIndex index{cell_x, cell_y};
+    if(!IsInside(index)) {
+      return std::nullopt;
+    }
+    return index;
+}
+
+
+Point2D Submap2D::GridToLocal(const GridIndex& index) const {
+  return Point2D{local_map_origin_.x + 
+                 (static_cast<double>(index.x) + 0.5) * options_.resolution,
+                 local_map_origin_.y +
+                 (static_cast<double>(index.y) + 0.5) * options_.resolution};
 }
 // 更新栅格。
 void Submap2D::UpdateCell(const GridIndex& index, const double delta) {
@@ -135,9 +138,9 @@ void Submap2D::UpdateCell(const GridIndex& index, const double delta) {
   log_odds = std::clamp(log_odds + delta, -4.0, 4.0);
 }
 
-void Submap2D::CastRay(const Point2D& start, const Point2D& end) {
-  const auto start_index = WorldToGrid(start);
-  const auto end_index = WorldToGrid(end);
+void Submap2D::CastRay(const Point2D& start_local, const Point2D& end_local) {
+  const auto start_index = LocalToGrid(start_local);
+  const auto end_index = LocalToGrid(end_local);
   if (!start_index.has_value() || !end_index.has_value()) {
     return;
   }
