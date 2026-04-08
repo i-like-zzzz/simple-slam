@@ -20,13 +20,14 @@ namespace simple_slam {
 
 PoseGraph2D::PoseGraph2D(Options options) : options_(options) {}
 
-void PoseGraph2D::AddNode(const LocalSlamResult2D& result) {
+int PoseGraph2D::AddNode(const LocalSlamResult2D& result) {
   if (!result.valid) {
-    return;
+    return -1;
   }
-
+  const int node_id = next_node_id_++;
   nodes_.push_back(
-      TrajectoryNode2D{next_node_id_++, result.local_pose, result.range_data});
+      TrajectoryNode2D{node_id, result.local_pose, result.range_data});
+  return node_id;
 }
 
 const std::vector<TrajectoryNode2D>& PoseGraph2D::nodes() const {
@@ -50,6 +51,14 @@ void PoseGraph2D::RegisterSubmaps(
       submaps_.push_back(submap);
     }
   }
+}
+
+void PoseGraph2D::AddConstraint(const Constraint2D& constraint) {
+  constraints_.push_back(constraint);
+}
+
+const std::vector<Constraint2D>& PoseGraph2D::constraints() const {
+  return constraints_;
 }
 
 }  // namespace simple_slam

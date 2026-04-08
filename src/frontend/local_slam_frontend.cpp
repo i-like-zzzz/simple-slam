@@ -122,7 +122,7 @@ LocalSlamResult2D LocalSlamFrontend::AddScan(
   result.insertion_required = result.is_keyframe && options_.enable_map_update;
 
   if (result.insertion_required) {
-    InsertIntoActiveSubmaps(result.range_data, result.local_pose);
+    result.insertion_submap_ids = InsertIntoActiveSubmaps(result.range_data, result.local_pose);
     last_keyframe_pose_ = result.local_pose;
     has_last_keyframe_pose_ = true;
     accumulated_scans_ = 0;
@@ -560,13 +560,15 @@ bool LocalSlamFrontend::ShouldCreateKeyframe(const Pose2D& matched_pose) const {
          rotation >= options_.keyframe_rotation_threshold;
 }
 
-void LocalSlamFrontend::InsertIntoActiveSubmaps(const RangeData2D& range_data,
+std::vector<int> LocalSlamFrontend::InsertIntoActiveSubmaps(const RangeData2D& range_data,
                                                 const Pose2D& matched_pose) {
-  //
   MaybeGrowActiveSubmaps(matched_pose);
+  std::vector<int> insertion_submap_ids;
+  insertion_submap_ids.reserve(active_submaps_.size());
   for (auto& submap : active_submaps_) {
     if (!submap->IsFinished()) {
       submap->InsertRangeData(range_data, matched_pose);
+      insertion_submap_ids.push_back(submap->id());
     }
   }
   // 如果第一个子图完成了，就把它移到 finished_submaps_
@@ -574,6 +576,7 @@ void LocalSlamFrontend::InsertIntoActiveSubmaps(const RangeData2D& range_data,
     finished_submaps_.push_back(active_submaps_.front());
     active_submaps_.erase(active_submaps_.begin());
   }
+  return insertion_submap_ids;
 }
 // 维护两个重叠活动子图的生命周期，保证总有一个子图在生长，另一个子图在成熟。
 // 如果活跃子图为空先创建子图

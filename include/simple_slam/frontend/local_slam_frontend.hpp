@@ -133,7 +133,7 @@ class LocalSlamFrontend {
   bool ShouldCreateKeyframe(const Pose2D& matched_pose) const;
 
   // 把关键帧插入所有活动子图。
-  void InsertIntoActiveSubmaps(const RangeData2D& range_data,
+  std::vector<int> InsertIntoActiveSubmaps(const RangeData2D& range_data,
                                const Pose2D& matched_pose);
 
   // 维护两个重叠活动子图的生命周期。

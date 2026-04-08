@@ -33,15 +33,20 @@ class PoseGraph2D {
   explicit PoseGraph2D(Options options);
 
   // 添加一个新的轨迹节点。
-  void AddNode(const LocalSlamResult2D& result);
+  int AddNode(const LocalSlamResult2D& result);
   const std::vector<TrajectoryNode2D>& nodes() const;
   const std::vector<std::shared_ptr<Submap2D>>& submaps() const;
 
   // 把前端创建出的活动子图登记到位姿图容器里。
   void RegisterSubmaps(
       const std::vector<std::shared_ptr<Submap2D>>& active_submaps);
+  //添加约束
+  void AddConstraint(const Constraint2D& constraint);
+  //返回约束
+  const std::vector<Constraint2D>& constraints() const;
 
  private:
+  std::vector<Constraint2D> constraints_;
   Options options_;
   int next_node_id_ = 0;
   std::vector<TrajectoryNode2D> nodes_;

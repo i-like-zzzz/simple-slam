@@ -59,6 +59,21 @@ struct LocalSlamResult2D {
   RangeData2D range_data;
   bool insertion_required = false;
   bool is_keyframe = false;
+  std::vector<int> insertion_submap_ids;
+};
+//约束标签：子图内约束和闭环约束
+enum class ConstraintTag {
+  kIntraSubmap,  // 子图内约束：把一个轨迹节点和它所在子图的全局位姿连接起来。
+  kLoopClosure    // 闭环约束：把两个轨迹节点连接起来，通常跨子图。
+};
+
+struct Constraint2D {
+  int node_id = -1;
+  int submap_id = -1;
+  Pose2D relative_pose;
+  double translation_weight = 1.0;
+  double rotation_weight = 1.0;
+  ConstraintTag tag = ConstraintTag::kIntraSubmap;
 };
 
 // 位姿图里存储的轨迹节点。

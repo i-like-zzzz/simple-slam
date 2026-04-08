@@ -16,6 +16,7 @@
 
 #include <string>
 #include <utility>
+#include <algorithm>
 
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/transform_stamped.hpp"
@@ -227,8 +228,34 @@ void SimpleSlamNode::HandleScan(
 
   // 先把位姿图和后端链路挂起，当前阶段只保留：
   // scan -> lidar odom -> keyframe -> submap insertion -> RViz 调试
-  // pose_graph_->AddNode(result);
-  // pose_graph_->RegisterSubmaps(frontend_->GetActiveSubmaps());
+  const int node_id = pose_graph_->AddNode(result);
+  pose_graph_->RegisterSubmaps(frontend_->GetActiveSubmaps());
+
+  if(result.insertion_required && node_id >= 0) {
+    const auto& active_submaps = frontend_->GetActiveSubmaps();
+    for(const int submap_id : result.insertion_submap_ids) {
+      const auto submap_it = 
+        std::find_if(active_submaps.begin(), active_submaps.end(),
+                    [submap_id](const std::shared_ptr<Submap2D>& submap) {
+                    return submap->id() == submap_id;
+                    });
+
+      if(submap_it == active_submaps.end()) {
+        continue;
+      }
+      Constraint2D constraint;
+      constraint.node_id = node_id;
+      constraint.submap_id = submap_id;
+      //global_pose = Tmap->submap.  local_pose = Tmap->node 
+      constraint.relative_pose = 
+          RelativePose((*submap_it)->global_pose(), result.local_pose);
+      constraint.translation_weight = 1.0;
+      constraint.rotation_weight = 1.0;
+      constraint.tag = ConstraintTag::kIntraSubmap;
+      pose_graph_->AddConstraint(constraint);
+
+    }
+  }
   // backend_->AddLocalSlamResult(result);
   ++processed_scan_count_;
   if (debug_log_every_n_scans_ > 0 &&
