@@ -226,37 +226,48 @@ void SimpleSlamNode::HandleScan(
     return;
   }
 
-  // 先把位姿图和后端链路挂起，当前阶段只保留：
-  // scan -> lidar odom -> keyframe -> submap insertion -> RViz 调试
+  // 每一帧有效 scan 都先登记成 node；是否参与约束和优化，取决于后面
+  // 是否成为关键帧并真正插入活动子图。
   const int node_id = pose_graph_->AddNode(result);
   pose_graph_->RegisterSubmaps(frontend_->GetActiveSubmaps());
 
-  if(result.insertion_required && node_id >= 0) {
+  // 关键帧一旦插入到活动子图，就同步记录一条 node-submap 约束。
+  // 当前记录的是：
+  //   relative_pose = T_submap_node
+  // 后端后面会使用：
+  //   T_map_node ~= T_map_submap * T_submap_node
+  // 来统一优化节点和子图的全局位姿。
+  if (result.insertion_required && node_id >= 0) {
     const auto& active_submaps = frontend_->GetActiveSubmaps();
-    for(const int submap_id : result.insertion_submap_ids) {
-      const auto submap_it = 
-        std::find_if(active_submaps.begin(), active_submaps.end(),
-                    [submap_id](const std::shared_ptr<Submap2D>& submap) {
-                    return submap->id() == submap_id;
-                    });
+    for (const int submap_id : result.insertion_submap_ids) {
+      const auto submap_it = std::find_if(
+          active_submaps.begin(), active_submaps.end(),
+          [submap_id](const std::shared_ptr<Submap2D>& submap) {
+            return submap->id() == submap_id;
+          });
 
-      if(submap_it == active_submaps.end()) {
+      if (submap_it == active_submaps.end()) {
         continue;
       }
       Constraint2D constraint;
       constraint.node_id = node_id;
       constraint.submap_id = submap_id;
-      //global_pose = Tmap->submap.  local_pose = Tmap->node 
-      constraint.relative_pose = 
+
+      // submap->global_pose() 是 T_map_submap，result.local_pose 是 T_map_node，
+      // 所以 RelativePose(submap, node) 得到的正是约束里最核心的 T_submap_node。
+      constraint.relative_pose =
           RelativePose((*submap_it)->global_pose(), result.local_pose);
       constraint.translation_weight = 1.0;
       constraint.rotation_weight = 1.0;
       constraint.tag = ConstraintTag::kIntraSubmap;
       pose_graph_->AddConstraint(constraint);
-
     }
   }
-  // backend_->AddLocalSlamResult(result);
+
+  // 当前只在真正插入关键帧后触发后端，避免每一帧 scan 都跑一次无意义优化。
+  if (backend_->enabled() && result.insertion_required) {
+    backend_->RunOptimization(*pose_graph_);
+  }
   ++processed_scan_count_;
   if (debug_log_every_n_scans_ > 0 &&
       processed_scan_count_ % debug_log_every_n_scans_ == 0) {
@@ -485,18 +496,12 @@ nav_msgs::msg::OccupancyGrid SimpleSlamNode::BuildMergedMap(
       continue;
     }
 
-    const Point2D lower_left = submap->GetLowerLeftCorner();
-    const double submap_max_x =
-        lower_left.x +
-        static_cast<double>(submap->GetWidth()) * submap_resolution;
-    const double submap_max_y =
-        lower_left.y +
-        static_cast<double>(submap->GetHeight()) * submap_resolution;
-
-    global_min_x = std::min(global_min_x, lower_left.x);
-    global_min_y = std::min(global_min_y, lower_left.y);
-    global_max_x = std::max(global_max_x, submap_max_x);
-    global_max_y = std::max(global_max_y, submap_max_y);
+    for (const auto& corner : submap->GetWorldCorners()) {
+      global_min_x = std::min(global_min_x, corner.x);
+      global_min_y = std::min(global_min_y, corner.y);
+      global_max_x = std::max(global_max_x, corner.x);
+      global_max_y = std::max(global_max_y, corner.y);
+    }
   }
 
   if (global_min_x > global_max_x || global_min_y > global_max_y) {
@@ -531,13 +536,6 @@ nav_msgs::msg::OccupancyGrid SimpleSlamNode::BuildMergedMap(
       continue;
     }
 
-    const Point2D lower_left = submap->GetLowerLeftCorner();
-    // 计算子图左下角在全局地图中的栅格坐标，向最近的整数取整确保对齐。
-    const int offset_x = static_cast<int>(
-        std::lround((lower_left.x - global_min_x) / resolution));
-    const int offset_y = static_cast<int>(
-        std::lround((lower_left.y - global_min_y) / resolution));
-
     const int submap_width = submap->GetWidth();
     const int submap_height = submap->GetHeight();
     const auto submap_data = submap->ToOccupancyGridData();
@@ -553,8 +551,11 @@ nav_msgs::msg::OccupancyGrid SimpleSlamNode::BuildMergedMap(
           continue;
         }
 
-        const int global_x = offset_x + x;
-        const int global_y = offset_y + y;
+        const Point2D cell_center = submap->GetCellCenterInWorld(x, y);
+        const int global_x = static_cast<int>(
+            std::floor((cell_center.x - global_min_x) / resolution));
+        const int global_y = static_cast<int>(
+            std::floor((cell_center.y - global_min_y) / resolution));
         // 越界的部分直接丢弃，后续可以考虑扩展地图边界。
         if (global_x < 0 || global_y < 0 ||
             global_x >= static_cast<int>(global_width) ||
@@ -603,7 +604,9 @@ void SimpleSlamNode::PublishActiveSubmap(const rclcpp::Time& stamp) {
   grid_msg.info.origin.position.x = lower_left.x;
   grid_msg.info.origin.position.y = lower_left.y;
   grid_msg.info.origin.position.z = 0.0;
-  grid_msg.info.origin.orientation.w = 1.0;
+  tf2::Quaternion q;
+  q.setRPY(0.0, 0.0, submap->global_pose().yaw);
+  grid_msg.info.origin.orientation = tf2::toMsg(q);
 
   grid_msg.data = submap->ToOccupancyGridData();
   active_submap_pub_->publish(grid_msg);

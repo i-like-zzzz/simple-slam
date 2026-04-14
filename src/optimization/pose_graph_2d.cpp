@@ -61,4 +61,26 @@ const std::vector<Constraint2D>& PoseGraph2D::constraints() const {
   return constraints_;
 }
 
+void PoseGraph2D::UpdateNodePose(int node_id, const Pose2D& pose) {
+  const auto node = std::find_if(nodes_.begin(), nodes_.end(),
+                             [node_id](const TrajectoryNode2D& node) {
+                               return node.id == node_id;
+                             });
+  if(node == nodes_.end()) {
+    return;
+  }
+  node->local_pose = pose;
+}
+
+void PoseGraph2D::UpdateSubmapPose(int submap_id, const Pose2D& pose) {
+  const auto submap = std::find_if(submaps_.begin(), submaps_.end(),
+                             [submap_id](const std::shared_ptr<Submap2D>& submap) {
+                               return submap && submap->id() == submap_id;
+                             });
+  if(submap == submaps_.end() || !(*submap)) {
+    return;
+  }
+  (*submap)->SetGlobalPose(pose);
+}
+
 }  // namespace simple_slam

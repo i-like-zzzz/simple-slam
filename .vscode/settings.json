@@ -1,0 +1,10 @@
+{
+  "C_Cpp.default.compileCommands": "${workspaceFolder}/../../build/simple_slam/compile_commands.json",
+  "C_Cpp.default.compilerPath": "/usr/bin/g++",
+  "C_Cpp.default.cppStandard": "c++17",
+  "clangd.arguments": [
+    "--compile-commands-dir=${workspaceFolder}/../../build/simple_slam"
+  ],
+  "ros.distro": "humble",
+  "ROS2.distro": "humble"
+}

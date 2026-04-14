@@ -1,0 +1,22 @@
+{
+  "configurations": [
+    {
+      "name": "simple_slam",
+      "compileCommands": "${workspaceFolder}/../../build/simple_slam/compile_commands.json",
+      "compilerPath": "/usr/bin/g++",
+      "intelliSenseMode": "gcc-x64",
+      "cStandard": "gnu11",
+      "cppStandard": "c++17",
+      "includePath": [
+        "${workspaceFolder}/include/**",
+        "/opt/ros/humble/include/**",
+        "/usr/include/**"
+      ],
+      "browse": {
+        "limitSymbolsToIncludedHeaders": false,
+        "databaseFilename": "${default}"
+      }
+    }
+  ],
+  "version": 4
+}

@@ -77,6 +77,25 @@ Point2D Submap2D::GetLowerLeftCorner() const {
   return LocalToWorld(local_map_origin_);
 }
 
+Point2D Submap2D::GetCellCenterInWorld(const int cell_x, const int cell_y) const {
+  return LocalToWorld(GridToLocal(GridIndex{cell_x, cell_y}));
+}
+
+std::array<Point2D, 4> Submap2D::GetWorldCorners() const {
+  const Point2D lower_left = local_map_origin_;
+  const Point2D lower_right{
+      local_map_origin_.x + static_cast<double>(options_.width) * options_.resolution,
+      local_map_origin_.y};
+  const Point2D upper_left{
+      local_map_origin_.x,
+      local_map_origin_.y + static_cast<double>(options_.height) * options_.resolution};
+  const Point2D upper_right{
+      local_map_origin_.x + static_cast<double>(options_.width) * options_.resolution,
+      local_map_origin_.y + static_cast<double>(options_.height) * options_.resolution};
+  return {LocalToWorld(lower_left), LocalToWorld(lower_right),
+          LocalToWorld(upper_left), LocalToWorld(upper_right)};
+}
+
 double Submap2D::GetProbability(const Point2D& world_point) const {
   const auto local_point = WorldToLocal(world_point);
   const auto index = LocalToGrid(local_point);

@@ -15,6 +15,7 @@
 #ifndef SIMPLE_SLAM__MAPPING__SUBMAP_2D_HPP_
 #define SIMPLE_SLAM__MAPPING__SUBMAP_2D_HPP_
 
+#include <array>
 #include <optional>
 #include <vector>
 
@@ -50,6 +51,8 @@ class Submap2D {
   int GetWidth() const { return options_.width; }
   int GetHeight() const { return options_.height; }
   Point2D GetLowerLeftCorner() const;
+  Point2D GetCellCenterInWorld(int cell_x, int cell_y) const;
+  std::array<Point2D, 4> GetWorldCorners() const;
   double GetResolution() const { return options_.resolution; }
   std::vector<int8_t> ToOccupancyGridData() const;
 

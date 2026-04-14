@@ -1,0 +1,55 @@
+simple_slam_node:
+  ros__parameters:
+    # 适用于 bag 中只有激光坐标系、没有 base_link/base_footprint 的情况。
+    # 当前这包数据的 /scan.header.frame_id = laser_link，且 bag 内没有可用的
+    # odom -> base_link 或 base_link -> laser_link TF，所以直接把 map 挂到 laser_link。
+    use_sim_time: true
+    map_frame: map
+    odom_frame: laser_link
+    published_frame: laser_link
+
+    system_mode: mapping
+    enable_backend: false
+    enable_tf_smoothing: true
+    tf_translation_alpha: 0.08
+    tf_rotation_alpha: 0.10
+
+    publish_keyframe_markers: true
+    keyframe_marker_scale: 0.25
+    debug_log_every_n_scans: 100
+
+    min_range: 0.05
+    max_range: 20.0
+    voxel_filter_size: 0.05
+
+    scans_per_accumulation: 1
+    active_submap_num_range_data: 90
+    min_range_points_for_match: 20
+    keyframe_translation_threshold: 0.20
+    keyframe_rotation_threshold: 0.17
+
+    lidar_odom_matcher: generalized_icp
+    lidar_odom_linear_window: 0.20
+    lidar_odom_angular_window: 0.20
+    lidar_odom_translation_weight: 1.0
+    lidar_odom_rotation_weight: 0.2
+    lidar_odom_point_sigma: 0.15
+    lidar_odom_max_points: 180
+    lidar_odom_max_iterations: 40
+
+    lidar_odom_ceres_max_correspondence_distance: 0.30
+    lidar_odom_ceres_huber_scale: 0.10
+    lidar_odom_ceres_max_num_iterations: 20
+
+    linear_search_window: 0.3
+    angular_search_window: 0.35
+    linear_search_step: 0.05
+    angular_search_step: 0.05
+    translation_delta_cost_weight: 1.0
+    rotation_delta_cost_weight: 0.2
+
+    submap_resolution: 0.05
+    submap_width: 400
+    submap_height: 400
+    submap_hit_probability: 0.7
+    submap_miss_probability: 0.49

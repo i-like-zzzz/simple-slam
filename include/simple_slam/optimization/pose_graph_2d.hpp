@@ -40,10 +40,15 @@ class PoseGraph2D {
   // 把前端创建出的活动子图登记到位姿图容器里。
   void RegisterSubmaps(
       const std::vector<std::shared_ptr<Submap2D>>& active_submaps);
-  //添加约束
+  // 记录 node-submap 约束。当前主要写入 intra-submap 约束，
+  // 后续 loop closure 也会走同一入口。
   void AddConstraint(const Constraint2D& constraint);
-  //返回约束
+  // 后端优化读取整张图时，会统一遍历这里的约束集合。
   const std::vector<Constraint2D>& constraints() const;
+
+  // 当前先保留显式更新接口，方便后端在优化完成后把结果回写进容器。
+  void UpdateNodePose(int node_id, const Pose2D& pose);
+  void UpdateSubmapPose(int submap_id, const Pose2D& pose);
 
  private:
   std::vector<Constraint2D> constraints_;

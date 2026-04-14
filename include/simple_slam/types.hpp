@@ -59,14 +59,19 @@ struct LocalSlamResult2D {
   RangeData2D range_data;
   bool insertion_required = false;
   bool is_keyframe = false;
+  // 当前关键帧被插入了哪些活动子图。节点层会据此补 node-submap 约束。
   std::vector<int> insertion_submap_ids;
 };
-//约束标签：子图内约束和闭环约束
+
+// 约束标签：先区分“正常插入活动子图”得到的约束，和未来闭环生成的约束。
 enum class ConstraintTag {
   kIntraSubmap,  // 子图内约束：把一个轨迹节点和它所在子图的全局位姿连接起来。
-  kLoopClosure    // 闭环约束：把两个轨迹节点连接起来，通常跨子图。
+  kLoopClosure  // 闭环约束：把两个轨迹节点连接起来，通常跨子图。
 };
 
+// 位姿图里的边。当前最重要的是：
+//   node_pose ~= submap_pose * relative_pose
+// 其中 relative_pose 表示 T_submap_node。
 struct Constraint2D {
   int node_id = -1;
   int submap_id = -1;
@@ -76,9 +81,20 @@ struct Constraint2D {
   ConstraintTag tag = ConstraintTag::kIntraSubmap;
 };
 
+// 位姿图里存储的轨迹节点数据。
+struct OptimizedNode2D {
+  int id = -1;
+  Pose2D pose;
+};
+// 位姿图里存储的子图数据。
+struct OptimizedSubmap2D {
+  int id = -1;
+  Pose2D pose;
+};
 // 位姿图里存储的轨迹节点。
 struct TrajectoryNode2D {
   int id = -1;
+  // 当前先保存前端给出的 map 系下节点位姿，后面可再区分 optimized pose。
   Pose2D local_pose;
   RangeData2D filtered_range_data;
 };
@@ -124,14 +140,15 @@ inline Pose2D InversePose(const Pose2D& pose) {
   return Pose2D{x, y, NormalizeAngle(-pose.yaw)};
 }
 
-// 位姿复合：先施加 lhs，再施加 rhs。 Ta->c = Tlhs * Trhs -------- Ta->c = Ta->b
-// * Tb->c
+// 位姿复合：先施加 lhs，再施加 rhs。
+// 若 lhs = T_a_b, rhs = T_b_c，则结果为 T_a_c。
 inline Pose2D ComposePoses(const Pose2D& lhs, const Pose2D& rhs) {
   const auto translated = TransformPoint(Point2D{rhs.x, rhs.y}, lhs);
   return Pose2D{translated.x, translated.y, NormalizeAngle(lhs.yaw + rhs.yaw)};
 }
 
-// 计算 from 到 to 的相对位姿。Tfrom->to
+// 计算 from 到 to 的相对位姿。若 from = T_map_submap, to = T_map_node，
+// 则结果就是后端常用的 T_submap_node。
 inline Pose2D RelativePose(const Pose2D& from, const Pose2D& to) {
   return ComposePoses(InversePose(from), to);
 }
