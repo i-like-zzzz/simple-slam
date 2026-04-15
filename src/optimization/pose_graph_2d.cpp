@@ -16,50 +16,71 @@
 
 #include <algorithm>
 
-namespace simple_slam
-{
+namespace simple_slam {
 
-PoseGraph2D::PoseGraph2D(Options options)
-: options_(options)
-{
-}
+PoseGraph2D::PoseGraph2D(Options options) : options_(options) {}
 
-void PoseGraph2D::AddNode(const LocalSlamResult2D & result)
-{
+int PoseGraph2D::AddNode(const LocalSlamResult2D& result) {
   if (!result.valid) {
-    return;
+    return -1;
   }
-
+  const int node_id = next_node_id_++;
   nodes_.push_back(
-    TrajectoryNode2D{
-      next_node_id_++,
-      result.local_pose,
-      result.range_data});
+      TrajectoryNode2D{node_id, result.local_pose, result.range_data});
+  return node_id;
 }
 
-const std::vector<TrajectoryNode2D> & PoseGraph2D::nodes() const
-{
+const std::vector<TrajectoryNode2D>& PoseGraph2D::nodes() const {
   return nodes_;
 }
 
-const std::vector<std::shared_ptr<Submap2D>> & PoseGraph2D::submaps() const
-{
+const std::vector<std::shared_ptr<Submap2D>>& PoseGraph2D::submaps() const {
   return submaps_;
 }
 
-void PoseGraph2D::RegisterSubmaps(const std::vector<std::shared_ptr<Submap2D>> & active_submaps)
-{
+void PoseGraph2D::RegisterSubmaps(
+    const std::vector<std::shared_ptr<Submap2D>>& active_submaps) {
   // 只登记新出现的子图，避免每帧都重复压入同一份 shared_ptr。
-  for (const auto & submap : active_submaps) {
-    const auto existing = std::find_if(
-      submaps_.begin(), submaps_.end(),
-      [submap](const std::shared_ptr<Submap2D> & candidate) {
-        return candidate->id() == submap->id();
-      });
+  for (const auto& submap : active_submaps) {
+    const auto existing =
+        std::find_if(submaps_.begin(), submaps_.end(),
+                     [submap](const std::shared_ptr<Submap2D>& candidate) {
+                       return candidate->id() == submap->id();
+                     });
     if (existing == submaps_.end()) {
       submaps_.push_back(submap);
     }
   }
+}
+
+void PoseGraph2D::AddConstraint(const Constraint2D& constraint) {
+  constraints_.push_back(constraint);
+}
+
+const std::vector<Constraint2D>& PoseGraph2D::constraints() const {
+  return constraints_;
+}
+
+void PoseGraph2D::UpdateNodePose(int node_id, const Pose2D& pose) {
+  const auto node = std::find_if(nodes_.begin(), nodes_.end(),
+                             [node_id](const TrajectoryNode2D& node) {
+                               return node.id == node_id;
+                             });
+  if(node == nodes_.end()) {
+    return;
+  }
+  node->local_pose = pose;
+}
+
+void PoseGraph2D::UpdateSubmapPose(int submap_id, const Pose2D& pose) {
+  const auto submap = std::find_if(submaps_.begin(), submaps_.end(),
+                             [submap_id](const std::shared_ptr<Submap2D>& submap) {
+                               return submap && submap->id() == submap_id;
+                             });
+  if(submap == submaps_.end() || !(*submap)) {
+    return;
+  }
+  (*submap)->SetGlobalPose(pose);
 }
 
 }  // namespace simple_slam

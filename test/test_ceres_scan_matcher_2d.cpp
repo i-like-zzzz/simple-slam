@@ -18,64 +18,28 @@
 #include "gtest/gtest.h"
 #include "simple_slam/frontend/ceres_scan_matcher_2d.hpp"
 
-namespace simple_slam
-{
-namespace
-{
+namespace simple_slam {
+namespace {
 
-std::vector<Point2D> RotatePoints(const std::vector<Point2D> & points, const double yaw)
-{
+std::vector<Point2D> RotatePoints(const std::vector<Point2D>& points,
+                                  const double yaw) {
   std::vector<Point2D> rotated_points;
   rotated_points.reserve(points.size());
 
   const double cos_yaw = std::cos(yaw);
   const double sin_yaw = std::sin(yaw);
 
-  for (const auto & point : points) {
-    rotated_points.push_back(
-      Point2D{
-          cos_yaw * point.x - sin_yaw * point.y,
-          sin_yaw * point.x + cos_yaw * point.y});
+  for (const auto& point : points) {
+    rotated_points.push_back(Point2D{cos_yaw * point.x - sin_yaw * point.y,
+                                     sin_yaw * point.x + cos_yaw * point.y});
   }
   return rotated_points;
 }
 
-TEST(CeresScanMatcher2DTest, MatchesPerfectlyAlignedScans)
-{
+TEST(CeresScanMatcher2DTest, MatchesPerfectlyAlignedScans) {
   const std::vector<Point2D> points = {
-    {1.0, 0.0},
-    {2.0, 0.0},
-    {2.0, 1.0},
-    {1.0, 2.0},
-    {0.5, 1.5},
+      {1.0, 0.0}, {2.0, 0.0}, {2.0, 1.0}, {1.0, 2.0}, {0.5, 1.5},
   };
-
-  CeresScanMatcher2D::Options options;
-  options.max_correspondence_distance = 1.0;
-  options.huber_scale = 0.1;
-  options.max_num_iterations = 20;
-
-  CeresScanMatcher2D matcher(options);
-
-  const Pose2D initial_relative_pose{0.0, 0.0, 0.0};
-  const Pose2D matched_pose = matcher.Match(points, points, initial_relative_pose);
-
-  EXPECT_NEAR(matched_pose.x, 0.0, 1e-6);
-  EXPECT_NEAR(matched_pose.y, 0.0, 1e-6);
-  EXPECT_NEAR(matched_pose.yaw, 0.0, 1e-6);
-}
-
-TEST(CeresScanMatcher2DTest, RecoversSmallRotation)
-{
-  const std::vector<Point2D> previous_points = {
-    {1.0, 0.0},
-    {2.0, 0.0},
-    {2.0, 1.0},
-    {1.0, 2.0},
-    {0.5, 1.5},
-  };
-  const double yaw_delta = -0.2;
-  const std::vector<Point2D> current_points = RotatePoints(previous_points, yaw_delta);
 
   CeresScanMatcher2D::Options options;
   options.max_correspondence_distance = 1.0;
@@ -86,7 +50,31 @@ TEST(CeresScanMatcher2DTest, RecoversSmallRotation)
 
   const Pose2D initial_relative_pose{0.0, 0.0, 0.0};
   const Pose2D matched_pose =
-    matcher.Match(current_points, previous_points, initial_relative_pose);
+      matcher.Match(points, points, initial_relative_pose);
+
+  EXPECT_NEAR(matched_pose.x, 0.0, 1e-6);
+  EXPECT_NEAR(matched_pose.y, 0.0, 1e-6);
+  EXPECT_NEAR(matched_pose.yaw, 0.0, 1e-6);
+}
+
+TEST(CeresScanMatcher2DTest, RecoversSmallRotation) {
+  const std::vector<Point2D> previous_points = {
+      {1.0, 0.0}, {2.0, 0.0}, {2.0, 1.0}, {1.0, 2.0}, {0.5, 1.5},
+  };
+  const double yaw_delta = -0.2;
+  const std::vector<Point2D> current_points =
+      RotatePoints(previous_points, yaw_delta);
+
+  CeresScanMatcher2D::Options options;
+  options.max_correspondence_distance = 1.0;
+  options.huber_scale = 0.1;
+  options.max_num_iterations = 20;
+
+  CeresScanMatcher2D matcher(options);
+
+  const Pose2D initial_relative_pose{0.0, 0.0, 0.0};
+  const Pose2D matched_pose =
+      matcher.Match(current_points, previous_points, initial_relative_pose);
 
   EXPECT_NEAR(matched_pose.x, 0.0, 1e-2);
   EXPECT_NEAR(matched_pose.y, 0.0, 1e-2);

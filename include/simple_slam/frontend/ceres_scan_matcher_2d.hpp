@@ -19,14 +19,11 @@
 
 #include "simple_slam/types.hpp"
 
-namespace simple_slam
-{
+namespace simple_slam {
 
-class CeresScanMatcher2D
-{
-public:
-  struct Options
-  {
+class CeresScanMatcher2D {
+ public:
+  struct Options {
     double max_correspondence_distance = 0.3;
     double huber_scale = 0.1;
     int max_num_iterations = 20;
@@ -34,12 +31,11 @@ public:
 
   explicit CeresScanMatcher2D(Options options);
 
-  Pose2D Match(
-    const std::vector<Point2D> & current_points,
-    const std::vector<Point2D> & previous_points,
-    const Pose2D & initial_relative_pose) const;
+  Pose2D Match(const std::vector<Point2D>& current_points,
+               const std::vector<Point2D>& previous_points,
+               const Pose2D& initial_relative_pose) const;
 
-private:
+ private:
   Options options_;
 };
 

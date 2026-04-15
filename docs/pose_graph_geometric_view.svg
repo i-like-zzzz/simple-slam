@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760">
+  <defs>
+    <style>
+      .title { font: 700 30px sans-serif; fill: #111827; }
+      .subtitle { font: 500 17px sans-serif; fill: #4b5563; }
+      .panel { fill: #ffffff; stroke: #d1d5db; stroke-width: 2; }
+      .mapbg { fill: #f8fafc; stroke: #cbd5e1; stroke-width: 2; }
+      .submapA { fill: rgba(59,130,246,0.16); stroke: #2563eb; stroke-width: 3; }
+      .submapB { fill: rgba(16,185,129,0.16); stroke: #059669; stroke-width: 3; }
+      .node { fill: #f59e0b; stroke: #92400e; stroke-width: 2.5; }
+      .scan { fill: #fb7185; opacity: 0.75; }
+      .edgeA { stroke: #2563eb; stroke-width: 2.5; stroke-dasharray: 8 6; }
+      .edgeB { stroke: #059669; stroke-width: 2.5; stroke-dasharray: 8 6; }
+      .label { font: 700 18px sans-serif; fill: #111827; }
+      .small { font: 500 14px sans-serif; fill: #374151; }
+      .tiny { font: 500 13px sans-serif; fill: #4b5563; }
+      .math { font: 600 16px monospace; fill: #111827; }
+    </style>
+  </defs>
+
+  <rect width="1200" height="760" fill="#ffffff"/>
+
+  <text x="50" y="52" class="title">Pose Graph Intuitive View</text>
+  <text x="50" y="82" class="subtitle">Nodes are geometrically inside submaps, while the backend still treats node / submap / constraint as separate graph elements.</text>
+
+  <rect x="40" y="110" width="760" height="600" rx="20" class="panel"/>
+  <text x="65" y="145" class="label">Geometric View In Map Frame</text>
+
+  <rect x="75" y="170" width="690" height="500" rx="18" class="mapbg"/>
+  <text x="95" y="205" class="small">map frame</text>
+
+  <g transform="translate(290 410) rotate(-12)">
+    <rect x="-170" y="-105" width="340" height="210" rx="20" class="submapA"/>
+    <text x="-145" y="-75" class="label" fill="#1d4ed8">submap_7</text>
+    <text x="-145" y="-50" class="tiny" fill="#1d4ed8">stores T_map_submap7</text>
+  </g>
+
+  <g transform="translate(480 390) rotate(10)">
+    <rect x="-170" y="-105" width="340" height="210" rx="20" class="submapB"/>
+    <text x="-145" y="-75" class="label" fill="#047857">submap_8</text>
+    <text x="-145" y="-50" class="tiny" fill="#047857">stores T_map_submap8</text>
+  </g>
+
+  <circle cx="295" cy="360" r="13" class="node"/>
+  <text x="315" y="364" class="small">node_42</text>
+
+  <circle cx="395" cy="400" r="13" class="node"/>
+  <text x="415" y="404" class="small">node_43</text>
+
+  <circle cx="520" cy="435" r="13" class="node"/>
+  <text x="540" y="439" class="small">node_44</text>
+
+  <line x1="245" y1="330" x2="295" y2="360" class="edgeA"/>
+  <line x1="350" y1="345" x2="395" y2="400" class="edgeA"/>
+  <line x1="450" y1="330" x2="395" y2="400" class="edgeB"/>
+  <line x1="575" y1="355" x2="520" y2="435" class="edgeB"/>
+
+  <text x="120" y="610" class="small">Blue / green transparent regions are submap local areas placed into the map by T_map_submap.</text>
+  <text x="120" y="635" class="small">Orange circles are keyframe nodes. Geometrically they lie inside one or two overlapping submaps.</text>
+
+  <g>
+    <circle cx="315" cy="335" r="3.2" class="scan"/>
+    <circle cx="326" cy="348" r="3.2" class="scan"/>
+    <circle cx="338" cy="358" r="3.2" class="scan"/>
+    <circle cx="276" cy="350" r="3.2" class="scan"/>
+    <circle cx="287" cy="340" r="3.2" class="scan"/>
+    <circle cx="409" cy="374" r="3.2" class="scan"/>
+    <circle cx="422" cy="389" r="3.2" class="scan"/>
+    <circle cx="379" cy="379" r="3.2" class="scan"/>
+    <circle cx="388" cy="364" r="3.2" class="scan"/>
+    <circle cx="505" cy="406" r="3.2" class="scan"/>
+    <circle cx="530" cy="413" r="3.2" class="scan"/>
+    <circle cx="546" cy="430" r="3.2" class="scan"/>
+    <circle cx="498" cy="430" r="3.2" class="scan"/>
+  </g>
+
+  <rect x="830" y="110" width="330" height="270" rx="20" class="panel"/>
+  <text x="855" y="145" class="label">What Each Thing Means</text>
+
+  <text x="855" y="185" class="small">1. submap boxes:</text>
+  <text x="885" y="210" class="math">T_map_submap</text>
+  <text x="885" y="233" class="tiny">Submap pose in the map frame</text>
+
+  <text x="855" y="275" class="small">2. orange node points:</text>
+  <text x="885" y="300" class="math">T_map_node</text>
+  <text x="885" y="323" class="tiny">Node pose in the map frame</text>
+
+  <text x="855" y="355" class="small">3. dashed relation lines:</text>
+  <text x="885" y="380" class="math">T_submap_node</text>
+  <text x="885" y="403" class="tiny">Stored in Constraint2D::relative_pose</text>
+
+  <rect x="830" y="410" width="330" height="210" rx="20" class="panel"/>
+  <text x="855" y="445" class="label">Backend View</text>
+  <text x="855" y="485" class="small">The backend does not optimize scan dots.</text>
+  <text x="855" y="515" class="small">It optimizes:</text>
+  <text x="885" y="545" class="math">T_map_node</text>
+  <text x="885" y="572" class="math">T_map_submap</text>
+  <text x="855" y="605" class="small">and tries to satisfy the measured</text>
+  <text x="885" y="632" class="math">T_submap_node</text>
+
+  <rect x="830" y="645" width="330" height="65" rx="14" class="panel"/>
+  <text x="852" y="684" class="small">This is why the system needs</text>
+  <text x="1020" y="684" class="math">nodes / submaps / constraints</text>
+</svg>

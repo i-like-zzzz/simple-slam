@@ -1,11 +1,12 @@
 simple_slam_node:
   ros__parameters:
-    # 回放 bag 时，这个仓库默认示例数据的机器人 TF 树根是 base_footprint，
-    # 不是 odom。把 map 直接挂到 base_footprint，避免 map 与雷达树断开。
+    # 适用于 bag 中只有激光坐标系、没有 base_link/base_footprint 的情况。
+    # 当前这包数据的 /scan.header.frame_id = laser_link，且 bag 内没有可用的
+    # odom -> base_link 或 base_link -> laser_link TF，所以直接把 map 挂到 laser_link。
     use_sim_time: true
     map_frame: map
-    odom_frame: base_footprint
-    published_frame: base_link
+    odom_frame: laser_link
+    published_frame: laser_link
 
     system_mode: mapping
     enable_backend: false
@@ -35,7 +36,7 @@ simple_slam_node:
     lidar_odom_point_sigma: 0.15
     lidar_odom_max_points: 180
     lidar_odom_max_iterations: 40
-    
+
     lidar_odom_ceres_max_correspondence_distance: 0.30
     lidar_odom_ceres_huber_scale: 0.10
     lidar_odom_ceres_max_num_iterations: 20

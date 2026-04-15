@@ -21,29 +21,37 @@
 #include "simple_slam/mapping/submap_2d.hpp"
 #include "simple_slam/types.hpp"
 
-namespace simple_slam
-{
+namespace simple_slam {
 
 // 当前先作为位姿图数据容器，后面再逐步接后端优化。
-class PoseGraph2D
-{
-public:
-  struct Options
-  {
+class PoseGraph2D {
+ public:
+  struct Options {
     int active_submap_num_range_data = 90;
   };
 
   explicit PoseGraph2D(Options options);
 
   // 添加一个新的轨迹节点。
-  void AddNode(const LocalSlamResult2D & result);
-  const std::vector<TrajectoryNode2D> & nodes() const;
-  const std::vector<std::shared_ptr<Submap2D>> & submaps() const;
+  int AddNode(const LocalSlamResult2D& result);
+  const std::vector<TrajectoryNode2D>& nodes() const;
+  const std::vector<std::shared_ptr<Submap2D>>& submaps() const;
 
   // 把前端创建出的活动子图登记到位姿图容器里。
-  void RegisterSubmaps(const std::vector<std::shared_ptr<Submap2D>> & active_submaps);
+  void RegisterSubmaps(
+      const std::vector<std::shared_ptr<Submap2D>>& active_submaps);
+  // 记录 node-submap 约束。当前主要写入 intra-submap 约束，
+  // 后续 loop closure 也会走同一入口。
+  void AddConstraint(const Constraint2D& constraint);
+  // 后端优化读取整张图时，会统一遍历这里的约束集合。
+  const std::vector<Constraint2D>& constraints() const;
 
-private:
+  // 当前先保留显式更新接口，方便后端在优化完成后把结果回写进容器。
+  void UpdateNodePose(int node_id, const Pose2D& pose);
+  void UpdateSubmapPose(int submap_id, const Pose2D& pose);
+
+ private:
+  std::vector<Constraint2D> constraints_;
   Options options_;
   int next_node_id_ = 0;
   std::vector<TrajectoryNode2D> nodes_;
