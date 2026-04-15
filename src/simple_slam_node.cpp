@@ -228,8 +228,11 @@ void SimpleSlamNode::HandleScan(
 
   // 每一帧有效 scan 都先登记成 node；是否参与约束和优化，取决于后面
   // 是否成为关键帧并真正插入活动子图。
-  const int node_id = pose_graph_->AddNode(result);
-  pose_graph_->RegisterSubmaps(frontend_->GetActiveSubmaps());
+  int node_id = -1;
+  if(result.insertion_required) {
+    node_id = pose_graph_->AddNode(result);
+    pose_graph_->RegisterSubmaps(frontend_->GetActiveSubmaps());
+  }
 
   // 关键帧一旦插入到活动子图，就同步记录一条 node-submap 约束。
   // 当前记录的是：

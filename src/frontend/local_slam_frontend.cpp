@@ -112,7 +112,7 @@ LocalSlamResult2D LocalSlamFrontend::AddScan(
         ComposePoses(lidar_odom_pose_estimate_, relative_lidar_motion);
   }
 
-  MaybeGrowActiveSubmaps(predicted_pose);
+  // MaybeGrowActiveSubmaps(predicted_pose);
   result.local_pose = MatchToActiveSubmap(result.range_data, lidar_odom_pose);
 
   ++accumulated_scans_;
@@ -486,17 +486,29 @@ Pose2D LocalSlamFrontend::MatchToActiveSubmap(
   if (active_submaps_.empty()) {
     return predicted_pose;
   }
-
-  const auto& matching_submap = active_submaps_.back();
-  if (!matching_submap->HasSufficientData()) {
+  bool has_usable_submap = false;
+  // const auto& matching_submap = active_submaps_.back();
+  // 匹配两张活动子图，但要判断子图是否有足够数据，避免新子图数据太少导致匹配失败。
+  for (const auto& submap : active_submaps_) {
+    if (submap && submap->HasSufficientData()) {
+      has_usable_submap = true;
+      break;
+    }
+  }
+  if (!has_usable_submap) {
     return predicted_pose;
   }
 
-  // 这里先做实时相关匹配，保证前端不依赖后端也能独立收敛。
   Pose2D best_pose = predicted_pose;
-  double best_score = ScoreCandidate(*matching_submap, range_data,
-                                     predicted_pose, predicted_pose);
-
+  double best_score = 0.0;
+  for (const auto& submap : active_submaps_) {
+    if (!submap || !submap->HasSufficientData()) {
+      continue;
+    }
+    best_score +=
+        ScoreCandidate(*submap, range_data, predicted_pose, predicted_pose);
+  }
+  // 在预测位姿附近的一个窗口内搜索，找到得分最高的位姿作为匹配结果。
   for (double yaw_delta = -options_.scan_matcher.angular_window;
        yaw_delta <= options_.scan_matcher.angular_window + 1e-6;
        yaw_delta += options_.scan_matcher.angular_step) {
@@ -511,8 +523,15 @@ Pose2D LocalSlamFrontend::MatchToActiveSubmap(
         candidate.y += dy;
         candidate.yaw = NormalizeAngle(candidate.yaw + yaw_delta);
 
-        const double score = ScoreCandidate(*matching_submap, range_data,
-                                            candidate, predicted_pose);
+        double score = 0.0;
+        // 对每个活动子图分别打分，最后求和作为这个候选位姿的总得分。
+        for (const auto& submap : active_submaps_) {
+          if (!submap || !submap->HasSufficientData()) {
+            continue;
+          }
+          score +=
+              ScoreCandidate(*submap, range_data, candidate, predicted_pose);
+        }
         if (score > best_score) {
           best_score = score;
           best_pose = candidate;
@@ -529,12 +548,21 @@ double LocalSlamFrontend::ScoreCandidate(const Submap2D& submap,
                                          const Pose2D& candidate_pose,
                                          const Pose2D& predicted_pose) const {
   double score = 0.0;
+  int known_hit_count = 0;
   for (const auto& hit_in_sensor : range_data.returns) {
     const Point2D hit_in_world = TransformPoint(hit_in_sensor, candidate_pose);
-    score += submap.GetProbability(hit_in_world);
+    if (!submap.IsKnown(hit_in_world)) {
+      continue;
+    }
+    const double probability = submap.GetProbability(hit_in_world);
+    score += 2.0 * probability - 1.0;
+    ++known_hit_count;
+  }
+  if (known_hit_count < 10) {
+    return std::numeric_limits<double>::lowest();
   }
 
-  score /= static_cast<double>(range_data.returns.size());
+  score /= static_cast<double>(known_hit_count);
 
   const double translation_penalty = std::hypot(
       candidate_pose.x - predicted_pose.x, candidate_pose.y - predicted_pose.y);

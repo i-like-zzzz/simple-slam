@@ -38,7 +38,7 @@ Submap2D::Submap2D(int id, Options options, const Pose2D& initial_pose)
     : id_(id),
       options_(options),
       global_pose_(initial_pose),
-      local_map_origin_{-0.5 * options.width * options.resolution , 
+      local_map_origin_{-0.5 * options.width * options.resolution,
                         -0.5 * options.height * options.resolution},
       log_odds_cells_(static_cast<size_t>(options.width * options.height), 0.0),
       known_cells_(static_cast<size_t>(options.width * options.height), false) {
@@ -105,6 +105,15 @@ double Submap2D::GetProbability(const Point2D& world_point) const {
   return LogOddsToProbability(log_odds_cells_[ToFlatIndex(*index)]);
 }
 
+bool Submap2D::IsKnown(const Point2D& world_point) const {
+  const auto local_point = WorldToLocal(world_point);
+  const auto index = LocalToGrid(local_point);
+  if (!index.has_value()) {
+    return false;
+  }
+  return known_cells_[ToFlatIndex(*index)];
+}
+
 bool Submap2D::HasSufficientData() const { return num_insertions_ >= 3; }
 
 const Submap2D::Options& Submap2D::options() const { return options_; }
@@ -128,20 +137,19 @@ Point2D Submap2D::LocalToWorld(const Point2D& local_point) const {
 
 std::optional<Submap2D::GridIndex> Submap2D::LocalToGrid(
     const Point2D& local_point) const {
-    const int cell_x = static_cast<int>(
+  const int cell_x = static_cast<int>(
       std::floor((local_point.x - local_map_origin_.x) / options_.resolution));
-      const int cell_y = static_cast<int>(
-        std::floor((local_point.y - local_map_origin_.y) / options_.resolution));
-    GridIndex index{cell_x, cell_y};
-    if(!IsInside(index)) {
-      return std::nullopt;
-    }
-    return index;
+  const int cell_y = static_cast<int>(
+      std::floor((local_point.y - local_map_origin_.y) / options_.resolution));
+  GridIndex index{cell_x, cell_y};
+  if (!IsInside(index)) {
+    return std::nullopt;
+  }
+  return index;
 }
 
-
 Point2D Submap2D::GridToLocal(const GridIndex& index) const {
-  return Point2D{local_map_origin_.x + 
+  return Point2D{local_map_origin_.x +
                  (static_cast<double>(index.x) + 0.5) * options_.resolution,
                  local_map_origin_.y +
                  (static_cast<double>(index.y) + 0.5) * options_.resolution};
